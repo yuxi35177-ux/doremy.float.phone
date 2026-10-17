@@ -502,7 +502,7 @@ export function DataManagement({ onNotice }: DataManagementProps) {
       const manifest = await readBackupManifest(file);
       setPendingImport({ file, manifest });
       setSelectedImportModules(manifest.modules.map((module) => module.id));
-      return `已读取备份：${manifest.modules.map((module) => module.label).join("、")}`;
+      return `已读取备份：${manifest.modules.map((module) => module.label).join("、")}。导入内容将写入当前人设的存档；其他人设存档不会被替换。`;
     });
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -789,7 +789,7 @@ export function DataManagement({ onNotice }: DataManagementProps) {
           <div className="menu-item data-readonly-item">
             <div className="menu-label-group">
               <span className="menu-label">本地导出·不含图片/多媒体</span>
-              <span className="menu-desc">仅【本地导出备份文件】生效：去掉壁纸、聊天图、朋友圈图等大文件（保留角色头像），文件更小、导出不卡。云端备份已支持分片上传，会完整备份图片，不受此开关影响。</span>
+              <span className="menu-desc">聊天、记忆等经历只导出当前人设；其他人设请切换后分别备份。API、预设及角色卡为共用资源。仅【本地导出备份文件】生效：去掉壁纸、聊天图、朋友圈图等大文件（保留角色头像），文件更小、导出不卡。云端备份已支持分片上传，会完整备份图片，不受此开关影响。</span>
             </div>
             <span className="menu-right">
               <Toggle checked={cloudConfig.excludeMedia} onChange={(checked) => updateCloud({ excludeMedia: checked })} />

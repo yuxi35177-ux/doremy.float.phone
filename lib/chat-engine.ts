@@ -671,14 +671,14 @@ export type ChatCompletionStreamCallbacks = {
 };
 
 function attachExternalAbort(internal: AbortController, external?: AbortSignal): () => void {
-    if (!external) return () => {};
-    if (external.aborted) {
-        internal.abort();
-        return () => {};
-    }
     const handler = () => internal.abort();
-    external.addEventListener("abort", handler);
-    return () => external.removeEventListener("abort", handler);
+    if (external?.aborted) internal.abort();
+    external?.addEventListener("abort", handler);
+    if (typeof window !== "undefined") window.addEventListener("identity-workspace-before-switch", handler);
+    return () => {
+        external?.removeEventListener("abort", handler);
+        if (typeof window !== "undefined") window.removeEventListener("identity-workspace-before-switch", handler);
+    };
 }
 
 function parseSseEvents(buffer: string): { events: string[]; rest: string } {

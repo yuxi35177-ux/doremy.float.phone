@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useContext } from "react";
 import { Plus, User, Trash2, FileEdit, AlertCircle, Camera, Link, X, Check } from "lucide-react";
 import { SettingsContext } from "../phone-settings-app";
-import { loadUserIdentities, saveUserIdentities } from "@/lib/settings-storage";
+import { loadUserIdentities, saveUserIdentities, activateUserIdentity, resolveUserIdentity } from "@/lib/settings-storage";
 import { Input } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/modal";
 
@@ -131,6 +131,7 @@ export function UserIdentitySettings() {
                 <h2 className="m-0 mx-2 ts-28 font-bold italic leading-none text-black">User Identity</h2>
             </div>
 
+            <p className="menu-desc mx-2">当前人设：{resolveUserIdentity()?.name || "未设置"}。点击「切换」打开该人设的独立存档，切回可恢复原聊天与记忆。API、预设和角色卡等资源共用；备份请按人设分别导出。</p>
             {identities.length === 0 ? (
                 <div className="ui-empty">
                     <div className="ui-icon-circle">
@@ -138,7 +139,7 @@ export function UserIdentitySettings() {
                     </div>
                     <span className="menu-label font-semibold">没有身份卡片</span>
                     <span className="menu-desc max-w-[240px]">
-                        在此管理您的个人身份信息，以便 AI 能够更好地了解您。
+                        每个人设使用独立存档；API、角色卡、预设等资源共用。首次升级时旧档保留给当时使用的人设。
                     </span>
                     <button onClick={addIdentity} className="ui-btn ui-btn-primary rounded-[20px] mt-2">
                         <Plus size={16} /> 添加身份
@@ -177,6 +178,10 @@ export function UserIdentitySettings() {
                                 )}
 
                                 <div className="flex gap-2 shrink-0 items-center">
+                                    <button type="button" className="ui-link-btn" disabled={resolveUserIdentity()?.id === identity.id}
+                                        onClick={event => { event.stopPropagation(); activateUserIdentity(identity.id); }}>
+                                        {resolveUserIdentity()?.id === identity.id ? "当前" : "切换"}
+                                    </button>
                                     <button
                                         type="button"
                                         onClick={(event) => {
@@ -191,6 +196,9 @@ export function UserIdentitySettings() {
                                         type="button"
                                         onClick={(event) => {
                                             event.stopPropagation();
+                                            if (resolveUserIdentity()?.id === identity.id) {
+                                                window.alert("请先切换到其他人设，再删除当前人设。"); return;
+                                            }
                                             setConfirmDeleteId(identity.id);
                                         }}
                                         className="ui-link-btn"

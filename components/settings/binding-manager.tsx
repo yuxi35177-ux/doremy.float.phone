@@ -464,7 +464,7 @@ export function BindingManager() {
             case "imageConfigId": return "生图 API";
             case "voiceConfigId": return "语音 API";
             case "presetId": return "预设";
-            case "userIdentityId": return "用户身份";
+            case "userIdentityId": return "人设存档（切换后重新打开）";
             case "worldBookIds": return "世界书";
             case "regexIds": return "正则规则";
         }
@@ -476,7 +476,7 @@ export function BindingManager() {
             case "imageConfigId": return "图片生成 API 方案";
             case "voiceConfigId": return "语音合成 API 方案";
             case "presetId": return "提示词预设";
-            case "userIdentityId": return "用户身份";
+            case "userIdentityId": return "人设存档（切换后重新打开）";
             case "worldBookIds": return "启用的世界书";
             case "regexIds": return "启用的正则规则";
         }
