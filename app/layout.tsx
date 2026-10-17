@@ -42,6 +42,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="float" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="mobile-web-app-capable" content="yes" />
+        <script src="/float-enhancer.js" defer />
       </head>
       <body>
         <PWAManifestInjector />
