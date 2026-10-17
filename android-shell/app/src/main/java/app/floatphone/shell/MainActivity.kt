@@ -55,7 +55,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         val SITE_URL: String = BuildConfig.SITE_URL
-        const val VERSION = "1.0.10"
+        val VERSION: String = BuildConfig.VERSION_NAME
         const val EXTRA_OPEN_URL = "open_url"
         const val DEEP_LINK_SCHEME = "floatshell"
         const val CH_MESSAGES = "shell_messages"

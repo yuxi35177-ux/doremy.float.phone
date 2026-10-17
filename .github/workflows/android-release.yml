@@ -1,0 +1,92 @@
+name: Publish signed Doremy APK
+
+on:
+  push:
+    branches: [release/doremy-apk-1.0.13]
+    paths: [android-shell/**, .github/workflows/android-release.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: doremy-apk-release-1.0.13
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/release/doremy-apk-1.0.13'
+    runs-on: ubuntu-latest
+    env:
+      SHELL_SITE_URL: ${{ secrets.SHELL_SITE_URL || vars.SHELL_SITE_URL }}
+      SHELL_KEYSTORE_BASE64: ${{ secrets.SHELL_KEYSTORE_BASE64 }}
+      SHELL_KEYSTORE_PASSWORD: ${{ secrets.SHELL_KEYSTORE_PASSWORD }}
+      SHELL_KEY_ALIAS: ${{ secrets.SHELL_KEY_ALIAS }}
+      SHELL_KEY_PASSWORD: ${{ secrets.SHELL_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require the repository's own persistent signing and site settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in SHELL_SITE_URL SHELL_KEYSTORE_BASE64 SHELL_KEYSTORE_PASSWORD SHELL_KEY_ALIAS SHELL_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing repository setting: $name. No unsigned or temporary-signed APK will be published."
+              exit 1
+            fi
+          done
+          python3 - <<'PY'
+          import os, urllib.parse
+          u = urllib.parse.urlparse(os.environ['SHELL_SITE_URL'])
+          if u.scheme != 'https' or not u.hostname or u.hostname.endswith('.invalid') or u.username or u.password:
+              raise SystemExit('SHELL_SITE_URL must be a real HTTPS site without embedded credentials')
+          PY
+          umask 077
+          printf '%s' "$SHELL_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/doremy.keystore"
+          echo "SHELL_KEYSTORE_FILE=$RUNNER_TEMP/doremy.keystore" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Compile and build signed release
+        run: gradle -p android-shell --no-daemon compileReleaseKotlin assembleRelease
+      - name: Verify APK signature and record checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=android-shell/app/build/outputs/apk/release/app-release.apk
+          test -s "$APK"
+          SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          "$SIGNER" verify --verbose --print-certs "$APK" > "$RUNNER_TEMP/apk-certificate.txt"
+          keytool -exportcert -keystore "$SHELL_KEYSTORE_FILE" -alias "$SHELL_KEY_ALIAS" -storepass:env SHELL_KEYSTORE_PASSWORD -file "$RUNNER_TEMP/expected.der"
+          EXPECTED=$(sha256sum "$RUNNER_TEMP/expected.der" | cut -d' ' -f1)
+          ACTUAL=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-certificate.txt" | head -1 | tr 'A-F' 'a-f')
+          test "$EXPECTED" = "$ACTUAL"
+          mkdir -p release-assets
+          cp "$APK" release-assets/Doremy-1.0.13-release.apk
+          printf 'Signing certificate SHA-256: %s\n' "$ACTUAL" > release-assets/signing-certificate.txt
+          cd release-assets
+          sha256sum Doremy-1.0.13-release.apk > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Doremy-1.0.13-signed-release
+          path: release-assets/*
+      - name: Publish testing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
+          本地模型 API、User 面具独立存档、本地通知、左右返回和桌面性能同步测试版。
+
+          使用本仓库配置的持久签名构建，包名保持 app.floatphone.shell，版本 1.0.13（12）。安装前先导出存档；只有旧 APK 使用相同签名时才能覆盖安装，不要为解决签名不一致而直接卸载旧版。
+
+          前端构建、Kotlin 编译和专项回归已通过，真实手机模型、通知及手势仍待测试。无身份标识的旧通知回复会暂存。未修改云端部署环境。
+          NOTES
+          gh release create v1.0.13 release-assets/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Doremy 1.0.13 同步测试版' --notes-file "$RUNNER_TEMP/notes.md" --prerelease
+      - name: Remove signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/doremy.keystore" "$RUNNER_TEMP/expected.der"
