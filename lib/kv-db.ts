@@ -1,3 +1,4 @@
+import { registerIdentityDatabase, workspaceKvKey, visibleWorkspaceKvKey, IDENTITY_WORKSPACE_KEY, getIdentityWorkspace, parseIdentityWorkspace, type IdentityWorkspace } from "./identity-workspace";
 // lib/kv-db.ts
 // Generic IndexedDB-backed key-value store with synchronous in-memory cache.
 // Replaces all localStorage usage to avoid the ~5-10MB quota limit.
@@ -8,6 +9,7 @@ class KvDatabase extends Dexie {
     entries!: Dexie.Table<{ key: string; value: string }, string>;
     constructor() {
         super("AiPhoneKvDB");
+        registerIdentityDatabase(this);
         this.version(1).stores({ entries: "key" });
     }
 }
@@ -40,12 +42,13 @@ export function registerDynamicPrefix(prefix: string): void {
 // Migrate a single legacy localStorage key into the cache + IDB, then drop it
 // from localStorage. Used by both initial hydration and late registration.
 function migrateLegacyKey(lsKey: string): void {
+    lsKey = workspaceKvKey(lsKey);
     if (typeof window === "undefined") return;
     const raw = localStorage.getItem(lsKey);
     if (raw === null) return;
     if (_cache.get(lsKey) !== raw) {
         _cache.set(lsKey, raw);
-        kvDb.entries.put({ key: lsKey, value: raw }).catch(() => {});
+        trackIdentityWrite(kvDb.entries.put({ key: lsKey, value: raw })).catch(() => {});
     }
     localStorage.removeItem(lsKey);
 }
@@ -55,7 +58,8 @@ function migrateLegacyPrefix(prefix: string): void {
     const matched: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
-        if (k && k.startsWith(prefix)) matched.push(k);
+        const logical = k ? visibleWorkspaceKvKey(k) : null;
+        if (logical !== null && logical.startsWith(prefix)) matched.push(logical);
     }
     for (const k of matched) migrateLegacyKey(k);
 }
@@ -65,7 +69,8 @@ function matchesDynamicPrefix(key: string): boolean {
 }
 
 function isManagedLegacyKey(key: string): boolean {
-    return _fixedKeys.includes(key) || matchesDynamicPrefix(key);
+    const logical = visibleWorkspaceKvKey(key);
+    return logical !== null && (_fixedKeys.includes(logical) || matchesDynamicPrefix(logical));
 }
 
 function removeLegacyLocalStorageKey(key: string): void {
@@ -130,7 +135,8 @@ export function hydrateKvDb(): Promise<void> {
         const removeKeys = new Set<string>();
 
         // Fixed keys
-        for (const lsKey of _fixedKeys) {
+        for (const logicalKey of _fixedKeys) {
+            const lsKey = workspaceKvKey(logicalKey);
             const raw = localStorage.getItem(lsKey);
             if (raw === null) continue;
             if (_cache.get(lsKey) !== raw) {
@@ -143,7 +149,9 @@ export function hydrateKvDb(): Promise<void> {
         // Dynamic prefix keys
         for (let i = 0; i < localStorage.length; i++) {
             const k = localStorage.key(i);
-            if (!k || !matchesDynamicPrefix(k)) continue;
+            if (!k) continue;
+            const logical = visibleWorkspaceKvKey(k);
+            if (logical === null || !matchesDynamicPrefix(logical)) continue;
             const raw = localStorage.getItem(k);
             if (raw !== null) {
                 if (_cache.get(k) !== raw) {
@@ -183,6 +191,7 @@ export function isKvHydrated(): boolean {
 }
 
 export function kvGet(key: string): string | null {
+    key = workspaceKvKey(key);
     const cached = _cache.get(key);
     if (cached !== undefined) return cached;
     return null;
@@ -190,9 +199,10 @@ export function kvGet(key: string): string | null {
 
 // ── Write: update cache + fire-and-forget to IDB ──
 export function kvSet(key: string, value: string): void {
+    key = workspaceKvKey(key);
     _cache.set(key, value);
     if (isManagedLegacyKey(key)) writeFallbackLocalStorage(key, value);
-    kvDb.entries.put({ key, value }).then(() => {
+    trackIdentityWrite(kvDb.entries.put({ key, value })).then(() => {
         if (isManagedLegacyKey(key)) removeLegacyLocalStorageKeyIfValue(key, value);
     }).catch(err => {
         writeFallbackLocalStorage(key, value);
@@ -203,10 +213,11 @@ export function kvSet(key: string, value: string): void {
 }
 
 export async function kvSetAsync(key: string, value: string): Promise<void> {
+    key = workspaceKvKey(key);
     _cache.set(key, value);
     if (isManagedLegacyKey(key)) writeFallbackLocalStorage(key, value);
     try {
-        await kvDb.entries.put({ key, value });
+        await trackIdentityWrite(kvDb.entries.put({ key, value }));
         if (isManagedLegacyKey(key)) removeLegacyLocalStorageKeyIfValue(key, value);
     } catch (err) {
         writeFallbackLocalStorage(key, value);
@@ -219,21 +230,58 @@ export async function kvSetAsync(key: string, value: string): Promise<void> {
 
 // ── Delete ──
 export function kvRemove(key: string): void {
+    key = workspaceKvKey(key);
     _cache.delete(key);
     if (isManagedLegacyKey(key)) removeLegacyLocalStorageKey(key);
-    kvDb.entries.delete(key).catch(err =>
+    trackIdentityWrite(kvDb.entries.delete(key)).catch(err =>
         console.warn("[KvDB] delete failed:", key, err));
 }
 
 // ── Iterate keys with a prefix (for dynamic keys) ──
 export function kvKeysWithPrefix(prefix: string): string[] {
     const result: string[] = [];
-    for (const k of _cache.keys()) {
-        if (k.startsWith(prefix)) result.push(k);
+    for (const physical of _cache.keys()) {
+        const k = visibleWorkspaceKvKey(physical);
+        if (k !== null && k.startsWith(prefix)) result.push(k);
     }
     return result;
 }
 
 export function kvEntries(): Array<{ key: string; value: string }> {
-    return Array.from(_cache.entries()).map(([key, value]) => ({ key, value }));
+    return Array.from(_cache.entries()).flatMap(([physical, value]) => {
+        const key = visibleWorkspaceKvKey(physical);
+        return key === null ? [] : [{ key, value }];
+    });
+}
+
+const pendingIdentityWrites = new Set<Promise<unknown>>();
+let identityWriteFailure = false;
+function trackIdentityWrite<T>(write: Promise<T>): Promise<T> {
+    pendingIdentityWrites.add(write);
+    write.then(() => pendingIdentityWrites.delete(write), () => {
+        identityWriteFailure = true; pendingIdentityWrites.delete(write);
+    });
+    return write;
+}
+export async function flushIdentityKvWrites(): Promise<void> {
+    if (!_hydrated) throw new Error("本地数据尚未读取完成，不能切换人设。");
+    while (pendingIdentityWrites.size) await Promise.all([...pendingIdentityWrites]);
+    if (identityWriteFailure) throw new Error("有本地写入未完成，请重新打开后重试。");
+}
+/** Routing + binding change are committed atomically, never by copying experience data. */
+export async function commitIdentityRouting(value: IdentityWorkspace, bindings?: string): Promise<void> {
+    const records = [{ key: IDENTITY_WORKSPACE_KEY, value: JSON.stringify(value) }];
+    if (bindings) records.push({ key: "ai_phone_bindings_v1", value: bindings });
+    await kvDb.transaction("rw", kvDb.entries, async () => {
+        const stored = await kvDb.entries.get(IDENTITY_WORKSPACE_KEY);
+        if (stored) {
+            const durable = parseIdentityWorkspace(stored.value);
+            if (durable.legacyOwnerId !== value.legacyOwnerId ||
+                (bindings ? durable.activeId !== getIdentityWorkspace()?.activeId : durable.activeId !== value.activeId)) {
+                throw new Error("其他页面已切换存档，请重新打开后再试。旧档归属不能覆盖。");
+            }
+        }
+        await kvDb.entries.bulkPut(records);
+    });
+    records.forEach(record => _cache.set(record.key, record.value));
 }

@@ -1,3 +1,4 @@
+import { workspaceDbName, workspaceKvKey } from "./identity-workspace";
 import type {
     CompositeToolConfig,
     CompositeToolPackageConfig,
@@ -686,6 +687,8 @@ async function executeCompositeScriptStep(
             {
                 toolId: tool.id,
                 toolName: tool.name,
+                workspaceDbName,
+                workspaceKvKey,
                 stepId: step.id,
                 stepName: step.name || step.saveAs || "脚本步骤",
                 saveAs: step.saveAs,

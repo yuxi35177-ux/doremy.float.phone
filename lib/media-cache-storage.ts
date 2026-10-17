@@ -1,3 +1,4 @@
+import { registerIdentityDatabase, workspaceDbName } from "./identity-workspace";
 import Dexie from "dexie";
 
 // ── Database ─────────────────────────────────────
@@ -14,7 +15,8 @@ class MediaCacheDatabase extends Dexie {
     entries!: Dexie.Table<MediaCacheEntry, string>;
 
     constructor() {
-        super("AiPhoneMediaCacheDB");
+        super(workspaceDbName("AiPhoneMediaCacheDB"));
+        registerIdentityDatabase(this);
         this.version(1).stores({
             entries: "id, createdAt",
         });

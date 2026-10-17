@@ -1,3 +1,4 @@
+import { registerIdentityDatabase, workspaceDbName } from "./identity-workspace";
 import Dexie from "dexie";
 import { formatChatTimestamp } from "./llm-prompt-assembler";
 import type { VnSession, VnMessage, VnChapterMeta, VnLayoutPrefs, VnBeat, VnFrameAudio } from "./vn-types";
@@ -9,7 +10,8 @@ class VnDatabase extends Dexie {
   config!: Dexie.Table<{ key: string; value: string }, string>;
 
   constructor() {
-    super("AiPhoneVnDB");
+    super(workspaceDbName("AiPhoneVnDB"));
+        registerIdentityDatabase(this);
     this.version(1).stores({
       sessions: "id, characterId, updatedAt",
       messages: "id, sessionId, chapterIndex, createdAt",

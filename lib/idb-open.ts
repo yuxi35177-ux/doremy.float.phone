@@ -1,3 +1,4 @@
+import { workspaceDbName } from "./identity-workspace";
 // Resilient IndexedDB open.
 //
 // Several stores open their database at a fixed version constant. The data
@@ -17,6 +18,7 @@ export function openIndexedDbAtLeast(
   minVersion: number,
   onUpgrade: (db: IDBDatabase, oldVersion: number, tx: IDBTransaction | null) => void,
 ): Promise<IDBDatabase> {
+  name = workspaceDbName(name);
   const openAt = (version?: number): Promise<IDBDatabase> =>
     new Promise((resolve, reject) => {
       let req: IDBOpenDBRequest;

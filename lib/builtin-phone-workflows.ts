@@ -126,7 +126,7 @@ function openIndexedDb(name) {
             resolve(null);
             return;
         }
-        var request = indexedDB.open(name);
+        var request = indexedDB.open(context.workspaceDbName(name));
         request.onsuccess = function () { resolve(request.result); };
         request.onerror = function () { resolve(null); };
         request.onblocked = function () { resolve(null); };
@@ -138,14 +138,14 @@ async function readPhoneKv(key) {
     if (db && Array.from(db.objectStoreNames).includes("entries")) {
         try {
             var transaction = db.transaction("entries", "readonly");
-            var record = await requestAsPromise(transaction.objectStore("entries").get(key));
+            var record = await requestAsPromise(transaction.objectStore("entries").get(context.workspaceKvKey(key)));
             if (record && typeof record.value === "string") return record.value;
         } finally {
             db.close();
         }
     }
     if (typeof window !== "undefined" && window.localStorage) {
-        return window.localStorage.getItem(key);
+        return window.localStorage.getItem(context.workspaceKvKey(key));
     }
     return null;
 }

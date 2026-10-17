@@ -1,4 +1,5 @@
 "use client";
+import { workspaceDbName, visibleWorkspaceKvKey } from "./identity-workspace";
 
 import { chatDb } from "./chat-db";
 import { updateChatMessage, type ChatMessage } from "./chat-storage";
@@ -512,7 +513,7 @@ async function openExistingDb(name: string): Promise<IDBDatabase | null> {
   if (!hasBrowserApi()) return null;
   return new Promise((resolve) => {
     let created = false;
-    const request = indexedDB.open(name);
+    const request = indexedDB.open(workspaceDbName(name));
     request.onupgradeneeded = () => {
       created = true;
       request.transaction?.abort();

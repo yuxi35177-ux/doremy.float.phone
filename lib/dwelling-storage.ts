@@ -1,3 +1,4 @@
+import { registerIdentityDatabase, workspaceDbName } from "./identity-workspace";
 import Dexie from "dexie";
 
 // ── Types ──────────────────────────────────────
@@ -63,7 +64,8 @@ class DwellingDatabase extends Dexie {
     itemHtml!: Dexie.Table<DwellingItemHtmlRow, string>;
 
     constructor() {
-        super("AiPhoneDwellingDB");
+        super(workspaceDbName("AiPhoneDwellingDB"));
+        registerIdentityDatabase(this);
         this.version(3).stores({
             layouts: "characterId",
             itemHtml: "id, characterId",

@@ -1,3 +1,4 @@
+import { workspaceDbName } from "./identity-workspace";
 import { callQaAgent, compactQaContext, formatQaErrorMessage, type QaContextEntry } from "./qa-agent-engine";
 import { QA_TOOLS, formatQaToolSubtitle, type QaCreatedContent, type QaProposedCommit } from "./qa-agent-tools";
 import { loadQaGithubConfig } from "./qa-github";
@@ -250,7 +251,7 @@ function makeId(): string {
 }
 
 function openQaDb(): IDBOpenDBRequest {
-    const request = indexedDB.open(QA_DB_NAME, QA_DB_VERSION);
+    const request = indexedDB.open(workspaceDbName(QA_DB_NAME), QA_DB_VERSION);
     request.onupgradeneeded = () => {
         if (!request.result.objectStoreNames.contains(QA_STORE)) {
             request.result.createObjectStore(QA_STORE);

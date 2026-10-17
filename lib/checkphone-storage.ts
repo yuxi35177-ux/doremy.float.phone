@@ -1,3 +1,4 @@
+import { registerIdentityDatabase, workspaceDbName } from "./identity-workspace";
 import Dexie from "dexie";
 import { CHECKPHONE_APP_SPECS, type CheckPhoneAppId, type CheckPhoneManifest, type CheckPhoneSnapshot } from "./checkphone-config";
 import { kvGet, kvRemove, kvSet, registerDynamicPrefix } from "./kv-db";
@@ -24,7 +25,8 @@ class CheckPhoneDatabase extends Dexie {
   snapshots!: Dexie.Table<CheckPhoneSnapshotRow, string>;
 
   constructor() {
-    super("AiPhoneCheckPhoneDB");
+    super(workspaceDbName("AiPhoneCheckPhoneDB"));
+        registerIdentityDatabase(this);
     this.version(1).stores({
       manifests: "characterId, updatedAt",
     });
