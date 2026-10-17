@@ -1,3 +1,4 @@
+import { localApiFetch } from "./local-api-fetch";
 // lib/api-helpers.ts
 // Unified API helpers — single source of truth for provider URL resolution,
 // request headers, and response parsing. All LLM-calling modules should use these.
@@ -13,7 +14,7 @@ const SIMPLE_ANTHROPIC_AUTO_MAX_TOKENS = 8192;
  * Supports all 11 UI providers + Custom (relies on baseUrl field).
  */
 export function determineBaseUrl(config: { provider: string; baseUrl?: string }): string {
-    if (config.baseUrl) return config.baseUrl;
+    if (config.baseUrl?.trim()) return config.baseUrl.trim().replace(/\/+$/, "");
     switch (config.provider) {
         case "OpenAI":      return "https://api.openai.com/v1";
         case "Anthropic":   return "https://api.anthropic.com/v1";
@@ -158,9 +159,9 @@ export async function simpleLLMCall(
 
         const bodySize = body.length;
         const bodyTokenEstimate = Math.ceil(bodySize / 3);
-        console.log("[simpleLLMCall] Request:", { url: fetchUrl.slice(0, 80), bodySize, bodyTokenEstimate, model: config.defaultModel });
+        console.log("[simpleLLMCall] Request:", { url: (() => { const u = new URL(fetchUrl); return u.origin + u.pathname; })(), bodySize, bodyTokenEstimate, model: config.defaultModel });
 
-        const res = await fetch(fetchUrl, { method: "POST", headers, body, signal: options?.signal });
+        const res = await localApiFetch(fetchUrl, { method: "POST", headers, body, signal: options?.signal });
 
         if (!res.ok) {
             const errText = await res.text().catch(() => "");

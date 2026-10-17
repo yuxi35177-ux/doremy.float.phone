@@ -50,6 +50,7 @@ import java.io.File
 import java.io.FileOutputStream
 
 class MainActivity : AppCompatActivity() {
+    private var localApiBridge: LocalApiBridge? = null
 
     companion object {
         val SITE_URL: String = BuildConfig.SITE_URL
@@ -217,12 +218,17 @@ class MainActivity : AppCompatActivity() {
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false)
 
+        localApiBridge = LocalApiBridge(webView, SITE_URL).also { it.attach() }
         webView.addJavascriptInterface(ShellBridge(), "AndroidShell")
         webView.addJavascriptInterface(PhoneWidgetBridge(), "PhoneWidget")
         PerceptionBridge.attachStepSensor(this)
         ShellBus.webView = webView
 
         webView.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+                localApiBridge?.cancelAll()
+                super.onPageStarted(view, url, favicon)
+            }
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val url = request.url
                 val scheme = url.scheme ?: return false
@@ -513,6 +519,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        localApiBridge?.cancelAll()
         if (ShellBus.webView === webView) ShellBus.webView = null
         CookieManager.getInstance().flush()
         webView.destroy()
