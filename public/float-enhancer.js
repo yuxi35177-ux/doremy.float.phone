@@ -46,89 +46,9 @@
   `;
   document.head.appendChild(style);
 
-  // ========== 2. 内存防卡顿：localStorage 内存镜像防阻塞 ==========
-  try {
-    const rawGet = Storage.prototype.getItem;
-    const rawSet = Storage.prototype.setItem;
-    const rawRemove = Storage.prototype.removeItem;
-    const rawClear = Storage.prototype.clear;
-    const memCache = new Map();
-    const pendingWrites = new Map();
-    let flushTimer = null;
-
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k !== null) memCache.set(k, rawGet.call(localStorage, k));
-    }
-
-    const flushNow = () => {
-      if (flushTimer) clearTimeout(flushTimer);
-      flushTimer = null;
-      pendingWrites.forEach((v, k) => {
-        try {
-          if (v === null) rawRemove.call(localStorage, k);
-          else rawSet.call(localStorage, k, v);
-        } catch (e) {}
-      });
-      pendingWrites.clear();
-    };
-
-    const scheduleFlush = () => {
-      if (flushTimer) return;
-      flushTimer = setTimeout(() => {
-        if ('requestIdleCallback' in window) requestIdleCallback(flushNow);
-        else flushNow();
-      }, 500);
-    };
-
-    Storage.prototype.getItem = function (k) {
-      if (this === localStorage) {
-        const key = String(k);
-        if (memCache.has(key)) return memCache.get(key);
-        const val = rawGet.call(localStorage, key);
-        memCache.set(key, val);
-        return val;
-      }
-      return rawGet.call(this, k);
-    };
-
-    Storage.prototype.setItem = function (k, v) {
-      if (this === localStorage) {
-        const key = String(k);
-        const val = String(v);
-        if (memCache.get(key) === val) return;
-        memCache.set(key, val);
-        pendingWrites.set(key, val);
-        scheduleFlush();
-        return;
-      }
-      return rawSet.call(this, k, v);
-    };
-
-    Storage.prototype.removeItem = function (k) {
-      if (this === localStorage) {
-        const key = String(k);
-        memCache.delete(key);
-        pendingWrites.set(key, null);
-        scheduleFlush();
-        return;
-      }
-      return rawRemove.call(this, k);
-    };
-
-    Storage.prototype.clear = function () {
-      if (this === localStorage) {
-        memCache.clear();
-        pendingWrites.clear();
-      }
-      return rawClear.call(this);
-    };
-
-    window.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') flushNow();
-    });
-    window.addEventListener('pagehide', flushNow);
-  } catch (e) {}
+  // Storage remains native and synchronous. Persona routing is committed to
+  // IndexedDB before its localStorage boot mirror is written and the page reloads.
+  // Delayed Storage.prototype writes can strand that mirror or resurrect old keys.
 
   // ========== 3. 核心：拦截 vivo 系统级返回手势（防直接退出桌面） ==========
   const toast = document.createElement('div');
