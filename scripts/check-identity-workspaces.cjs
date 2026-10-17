@@ -54,6 +54,7 @@ async function close(t){for(const db of t.load('lib/identity-workspace.ts').getI
  assert.equal(scope.getIdentityWorkspace().legacyOwnerId,'persona-A');
  assert.equal(scope.workspaceDbName('AiPhoneChatDB'),'AiPhoneChatDB');
  const chats=a.load('lib/chat-db.ts');assert.equal((await chats.initChatDb()).messages[0].content,'A-only');
+ const legacyBackup=await a.load('lib/data-management/idb.ts').exportSource({type:'indexeddb',dbName:'AiPhoneChatDB'});
  const memory=a.load('lib/memory-storage.ts');
  await memory.saveMemoryEntry({id:'memory-A',characterId:'same-character',sourceApp:'chat',type:'long_term',content:'A memory',createdAt:'2026-01-01',updatedAt:'2026-01-01',importance:1});
  await control.switchIdentityWorkspace('persona-B','{"globalDefaults":{"userIdentityId":"persona-B"}}');
@@ -83,6 +84,11 @@ async function close(t){for(const db of t.load('lib/identity-workspace.ts').getI
  assert.equal(kv.kvGet('wallet-state'),null);
  await backup.importSource({type:'kv',records:[{key:scope.IDENTITY_WORKSPACE_KEY,value:'corrupt'}]},true);
  assert.equal(JSON.parse(kv.kvGet(scope.IDENTITY_WORKSPACE_KEY)).legacyOwnerId,'persona-A');
+ // A pre-isolation backup uses logical DB names; importing it targets B only.
+ const imported=await backup.importSource(legacyBackup,true);
+ assert.equal(imported.errors.length,0);
+ const restored=await backup.exportSource({type:'indexeddb',dbName:'AiPhoneChatDB'});
+ assert.ok(restored.stores.find(store=>store.name==='messages').records.some(record=>record.value.content==='A-only'));
  // Clearing B must not clear legacy A.
  await backup.clearSource({type:'indexeddb',dbName:'AiPhoneChatDB'});
  await control.switchIdentityWorkspace('persona-A','{"globalDefaults":{"userIdentityId":"persona-A"}}');await close(b);
@@ -117,6 +123,15 @@ async function close(t){for(const db of t.load('lib/identity-workspace.ts').getI
  await close(picker);
  assert.throws(()=>scope.parseIdentityWorkspace('{"version":1}'));
  assert.throws(()=>scope.workspaceDbName('AiPhoneChatDB::identity:persona-A'));
+ // A lazy legacy migration that fails to persist must retain its durable source.
+ const failedMigration=tab();const migrationKv=failedMigration.load('lib/kv-db.ts');await migrationKv.hydrateKvDb();
+ const migrationScope=failedMigration.load('lib/identity-workspace.ts');
+ const migrationDb=migrationScope.getIdentityDatabases().find(db=>db.name==='AiPhoneKvDB');
+ migrationDb.entries.hook('creating',()=>{throw new DOMException('quota test','QuotaExceededError');});
+ storage.setItem('late-legacy-copy','only durable copy');
+ migrationKv.registerKvMigration('late-legacy-copy');
+ await assert.rejects(migrationKv.flushIdentityKvWrites());
+ assert.equal(storage.getItem('late-legacy-copy'),'only durable copy');await close(failedMigration);
  // A reply to an old persona's Android notification must wait for that persona.
  const replyValues=new Map();let native=[{id:'r-A',sessionId:'session-A',text:'private reply A',at:1}];let currentSessions=[{id:'session-B'}];const delivered=[];
  const replyExports={};const replyCode=ts.transpileModule(fs.readFileSync('lib/notification-reply.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
