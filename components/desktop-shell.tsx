@@ -133,7 +133,7 @@ import { loadCharacters } from "@/lib/character-storage";
 import { generateChatCompletion, flattenCompletionResult } from "@/lib/chat-engine";
 import { parseAIResponse } from "@/lib/rich-message-parser";
 import { requestBackgroundChatReply, scheduleFollowUp } from "@/lib/follow-up-service";
-import { CHAT_MESSAGE_NOTICE_EVENT, CHAT_OPEN_SESSION_EVENT, type ChatMessageNoticeDetail } from "@/lib/chat-notification-events";
+import { CHAT_MESSAGE_NOTICE_EVENT, CHAT_OPEN_SESSION_EVENT, shouldSuppressChatNotice, type ChatMessageNoticeDetail } from "@/lib/chat-notification-events";
 import { startIncomingCallVibration } from "@/lib/call-vibration";
 import { CallLayer } from "@/components/chat/call-layer";
 import { installChatSoundListener, playChatSoundOnce, setMiniChatSoundSessionId, startChatSoundLoop } from "@/lib/chat-sound";
@@ -2679,7 +2679,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
       const isCurrentMainChat = activeApp === "chat" && activeChatSession?.id === detail.sessionId;
       const isCurrentMiniChat = showMiniChat && miniSessionRef.current?.id === detail.sessionId;
       // 测试弹窗（提示音设置里触发）不受“正在实时聊天则不弹横幅”限制
-      if (!detail.isTest && (isCurrentMainChat || isCurrentMiniChat)) return;
+      if (shouldSuppressChatNotice(detail.isTest === true, isCurrentMainChat || isCurrentMiniChat, document.hidden)) return;
 
       const sessions = loadChatSessions();
       const session = sessions.find(s => s.id === detail.sessionId);
@@ -2698,8 +2698,9 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
       // 「除当前聊天页外全线弹系统通知」，过滤逻辑与横幅共用同一处。
       if (canSendShellNotification()) {
         // 第 4 个参数带会话 id：壳点通知时据此直达该会话；旧壳会忽略多余参数。
-        sendShellNotification(title, detail.body.trim(), detail.avatar ?? char?.avatar ?? null, detail.sessionId);
-        return;
+        const sent = sendShellNotification(title, detail.body.trim(), detail.avatar ?? char?.avatar ?? null, detail.sessionId);
+        if (sent) return;
+        // Retain the in-app banner if the native bridge rejects the notification.
       }
 
       if (chatMessageNoticeTimerRef.current !== null) {

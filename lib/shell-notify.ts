@@ -1,3 +1,5 @@
+import { loadChatAppSettings, saveChatAppSettings } from "./chat-storage";
+
 // lib/shell-notify.ts
 //
 // 壳（FloatShell）原生系统通知的网页侧出口。
@@ -14,6 +16,34 @@
 //   · PushService：App 被杀时的离线消息，由服务端生成后经 Supabase Realtime 广播；
 //   · 本模块：网页活着时（前台/后台）的消息，直接让原生发一条本地通知。
 // 两条路都落到同一个「角色消息」通知渠道，用户在通知栏看到的是统一的系统通知。
+
+export function isShellNotificationEnabled(): boolean {
+    return loadChatAppSettings().shellNotificationsEnabled !== false;
+}
+
+export function setShellNotificationEnabled(enabled: boolean): void {
+    saveChatAppSettings({ ...loadChatAppSettings(), shellNotificationsEnabled: enabled });
+}
+
+export function openShellNotificationSettings(): boolean {
+    if (typeof window === "undefined") return false;
+    const bridge = (window as unknown as { AndroidShell?: { openAppSettings?: () => void } }).AndroidShell;
+    try {
+        if (typeof bridge?.openAppSettings !== "function") return false;
+        bridge.openAppSettings();
+        return true;
+    } catch { return false; }
+}
+
+export function testShellNotification(): { ok: boolean; message: string } {
+    if (!canSendShellNotification()) return { ok: false, message: "当前环境没有 APK 原生通知接口，请在小手机 APK 内测试。" };
+    if (!isShellNotificationEnabled()) return { ok: false, message: "请先开启本地系统通知。" };
+    // No avatar download, character, model request or cloud account is required.
+    const ok = sendShellNotification("小手机 · 本地通知测试", "这条通知由手机直接发送，不经过云端。", null, null);
+    return { ok, message: ok
+        ? "已交给安卓发送。若通知栏或顶部横幅没有出现，请打开系统设置，允许通知、悬浮通知及锁屏通知，并检查勿扰模式。"
+        : "安卓通知接口未能发送。请打开系统设置，检查通知权限及「角色消息」通知类别。" };
+}
 
 type ShellNotificationBridge = {
     /**
@@ -76,14 +106,14 @@ export function sendShellNotification(
     sessionId?: string | null,
 ): boolean {
     const bridge = getBridge();
-    if (!bridge) return false;
-    const noticeKey = `${title}\u0000${body}`;
+    if (!bridge || !isShellNotificationEnabled()) return false;
+    const noticeKey = `${sessionId || ""}\u0000${title}\u0000${body}`;
     const now = Date.now();
     if (noticeKey === lastNoticeKey && now - lastNoticeAt < NOTICE_DEDUPE_WINDOW_MS) return true;
-    lastNoticeKey = noticeKey;
-    lastNoticeAt = now;
     try {
-        return bridge.notify?.(title || "小手机", body || "", normalizeAvatar(avatar), sessionId || "") === true;
+        const sent = bridge.notify?.(title || "小手机", body || "", normalizeAvatar(avatar), sessionId || "") === true;
+        if (sent) { lastNoticeKey = noticeKey; lastNoticeAt = now; }
+        return sent;
     } catch {
         // 桥调用异常（旧壳签名不匹配等）绝不能让业务逻辑崩掉
         return false;
