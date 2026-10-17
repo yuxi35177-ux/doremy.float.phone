@@ -20,6 +20,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Base64
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
@@ -69,7 +70,6 @@ class MainActivity : AppCompatActivity() {
 
     private var imeInsetPx: Int = 0
     private var webNotifId = 500
-    private var lastExitBackTime = 0L
 
     private val perception by lazy { PerceptionBridge(this) }
     private val deviceAction by lazy { DeviceActionBridge(this) }
@@ -305,7 +305,7 @@ class MainActivity : AppCompatActivity() {
         // 接管 vivo 等系统的左右边缘侧滑返回手势：优先触发小手机内部返回按钮，不直接退回手机桌面
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                handleSmartBack()
+                requestWebBack()
             }
         })
 
@@ -332,65 +332,85 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** 原生智能返回：侧滑时自动点击小手机内部左上角返回箭头或返回按钮；已在桌面时双击才退回手机系统桌面 */
-    private fun handleSmartBack() {
-        if (!::webView.isInitialized) {
-            moveTaskToBack(true)
+    // Edge touch fallback for devices whose system gesture does not reach Back.
+    // Once horizontal intent is clear, cancel WebView's touch stream before acting.
+    private var edgeSwipeStartX = 0f
+    private var edgeSwipeStartY = 0f
+    private var edgeSwipeDirection = 1f
+    private var edgeSwipeTracking = false
+    private var edgeSwipeClaimed = false
+    private var edgeGestureId = 0
+    private var lastBackAt = 0L
+    private var backPending = false
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        val density = resources.displayMetrics.density
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                edgeSwipeStartX = event.x
+                edgeSwipeDirection = if (event.x <= resources.displayMetrics.widthPixels / 2f) 1f else -1f
+                edgeSwipeStartY = event.y
+                edgeGestureId++
+                val gestureId = edgeGestureId
+                edgeSwipeTracking = false
+                edgeSwipeClaimed = false
+                if (event.pointerCount == 1 && (event.x <= 20f * density || event.x >= resources.displayMetrics.widthPixels - 20f * density) && imeInsetPx == 0 && ::webView.isInitialized) {
+                    val x = event.x / density
+                    val y = event.y / density
+                    webView.evaluateJavascript("(typeof window.floatShellCanStartBack==='function' && window.floatShellCanStartBack($x,$y))") { eligible ->
+                        if (gestureId == edgeGestureId) edgeSwipeTracking = eligible == "true"
+                    }
+                }
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> { edgeGestureId++; edgeSwipeTracking = false }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = (event.x - edgeSwipeStartX) * edgeSwipeDirection
+                val dy = kotlin.math.abs(event.y - edgeSwipeStartY)
+                if (edgeSwipeTracking && !edgeSwipeClaimed) {
+                    if (dy > 12f * density && dy > dx * 0.5f || dx < -12f * density) edgeSwipeTracking = false
+                    else if (dx > 24f * density && dy < dx * 0.4f) {
+                        edgeSwipeClaimed = true
+                        val cancel = MotionEvent.obtain(event)
+                        cancel.action = MotionEvent.ACTION_CANCEL
+                        super.dispatchTouchEvent(cancel)
+                        cancel.recycle()
+                    }
+                }
+                if (edgeSwipeClaimed) return true
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                edgeGestureId++
+                val claimed = edgeSwipeClaimed
+                val back = event.actionMasked == MotionEvent.ACTION_UP && claimed &&
+                    (event.x - edgeSwipeStartX) * edgeSwipeDirection >= 80f * density &&
+                    kotlin.math.abs(event.y - edgeSwipeStartY) < (event.x - edgeSwipeStartX) * edgeSwipeDirection * 0.4f
+                edgeSwipeTracking = false
+                edgeSwipeClaimed = false
+                if (back) requestWebBack()
+                if (claimed) return true
+            }
+        }
+        return super.dispatchTouchEvent(event)
+    }
+
+    private fun requestWebBack() {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (backPending || now - lastBackAt < 400L) return
+        lastBackAt = now
+        if (imeInsetPx > 0) {
+            WindowInsetsControllerCompat(window, rootContainer).hide(WindowInsetsCompat.Type.ime())
             return
         }
-        val js = """
-            (function() {
-                try {
-                    var all = Array.from(document.querySelectorAll('button, a, [role="button"], [class*="cursor-pointer"]'));
-                    // 1. 优先匹配顶部/左上角返回箭头按钮
-                    for (var i = 0; i < all.length; i++) {
-                        var el = all[i];
-                        var r = el.getBoundingClientRect();
-                        if (r.width <= 0 || r.height <= 0) continue;
-                        if (r.top >= 0 && r.top <= 165 && r.left >= 0 && r.left <= 145 && r.width <= 130 && r.height <= 95) {
-                            var txt = (el.innerText || el.textContent || '').trim();
-                            var aria = ((el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '')).toLowerCase();
-                            var html = (el.innerHTML || '').toLowerCase();
-                            if (txt === '<' || txt === '‹' || txt === '←' || txt === '返回' ||
-                                aria.indexOf('back') !== -1 || aria.indexOf('返回') !== -1 ||
-                                html.indexOf('chevron-left') !== -1 || html.indexOf('arrow-left') !== -1 ||
-                                html.indexOf('<svg') !== -1) {
-                                el.click();
-                                return 'CLICKED';
-                            }
-                        }
-                    }
-                    // 2. 匹配页面中间显示的「返回」按钮（如空状态提示页）
-                    for (var j = 0; j < all.length; j++) {
-                        var el2 = all[j];
-                        var r2 = el2.getBoundingClientRect();
-                        if (r2.width <= 0 || r2.height <= 0) continue;
-                        var t2 = (el2.innerText || el2.textContent || '').trim();
-                        if (t2 === '返回' || t2 === '返回桌面' || t2 === '关闭') {
-                            el2.click();
-                            return 'CLICKED';
-                        }
-                    }
-                } catch (e) {}
-                return 'NONE';
-            })();
-        """.trimIndent()
-
-        webView.evaluateJavascript(js) { result ->
-            val res = result?.trim('"') ?: "NONE"
-            if (res == "CLICKED") {
-                return@evaluateJavascript
-            }
-            if (webView.canGoBack()) {
-                webView.goBack()
-                return@evaluateJavascript
-            }
-            val now = System.currentTimeMillis()
-            if (now - lastExitBackTime < 2000L) {
-                moveTaskToBack(true)
-            } else {
-                lastExitBackTime = now
-                Toast.makeText(this, "已在小手机桌面，再滑一次退回手机桌面", Toast.LENGTH_SHORT).show()
+        backPending = true
+        webView.evaluateJavascript("(function(){try{return typeof window.floatShellBack==='function' ? window.floatShellBack() : null;}catch(e){return null;}})()") { result ->
+            backPending = false
+            // No JS handler (loading/login) is deliberately a no-op. Never exit.
+            if (result == "false" && webView.canGoBack()) {
+                val list = webView.copyBackForwardList()
+                val previous = list.getItemAtIndex(list.currentIndex - 1)?.url
+                val current = Uri.parse(SITE_URL)
+                val target = previous?.let { Uri.parse(it) }
+                if (target?.scheme == current.scheme && target.host == current.host && target.port == current.port) webView.goBack()
             }
         }
     }

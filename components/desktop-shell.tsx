@@ -1292,6 +1292,19 @@ export function DesktopShell({ initialThemeProfile, initialThemeAssets }: Deskto
 
   const [widgetPickerTab, setWidgetPickerTab] = useState<"standard" | "freestyle">("standard");
   const [showDesktopCustomizer, setShowDesktopCustomizer] = useState(false);
+  useEffect(() => {
+    const back = (event: Event) => {
+      if (showDesktopCustomizer) setShowDesktopCustomizer(false);
+      else if (openFolderId) setOpenFolderId(null);
+      else if (editMode) setEditMode(false);
+      else if (activeApp) setActiveApp(null);
+      // Consume at desktop too: Android Back never backgrounds the app.
+      event.preventDefault();
+    };
+    window.addEventListener("float-navigation-back", back);
+    return () => window.removeEventListener("float-navigation-back", back);
+  }, [activeApp, editMode, openFolderId, showDesktopCustomizer]);
+
   const pageKeys = useMemo(() => getDesktopPageKeysForState(layout, widgets), [layout, widgets]);
   const pageCount = pageKeys.length;
   const [dragItem, setDragItem] = useState<{

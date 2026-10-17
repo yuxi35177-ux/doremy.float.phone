@@ -64,83 +64,8 @@
     }, duration);
   };
 
-  const findInAppBackButton = () => {
-    const candidates = Array.from(
-      document.querySelectorAll('button, a, [role="button"], div[class*="cursor-pointer"]')
-    );
-    for (const el of candidates) {
-      const rect = el.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) continue;
-      // 位于屏幕顶部或左上角的返回控件
-      if (rect.top >= 0 && rect.top <= 140 && rect.left >= 0 && rect.left <= 130) {
-        const text = (el.textContent || '').trim();
-        const aria = (el.getAttribute('aria-label') || el.getAttribute('title') || '').toLowerCase();
-        const html = el.innerHTML.toLowerCase();
-        if (
-          text === '<' ||
-          text === '‹' ||
-          text === '←' ||
-          text.includes('返回') ||
-          aria.includes('back') ||
-          aria.includes('返回') ||
-          html.includes('chevron-left') ||
-          html.includes('arrow-left') ||
-          html.includes('lucide-arrow')
-        ) {
-          return el;
-        }
-      }
-    }
-    return null;
-  };
-
-  // 维护一个页面深度栈，拦截 vivo 侧滑返回
-  let lastBackPressTime = 0;
-  const pushGuardState = () => {
-    try {
-      window.history.pushState({ floatSubPage: true }, '');
-    } catch (e) {}
-  };
-
-  // 监听用户点击进入任意子功能时自动挂载防退手势网
-  document.addEventListener(
-    'click',
-    (e) => {
-      setTimeout(() => {
-        const btn = findInAppBackButton();
-        if (btn) {
-          pushGuardState();
-        }
-      }, 350);
-    },
-    true
-  );
-
-  // 核心拦截点：当 vivo 系统侧滑返回触发浏览器的 popstate 时
-  window.addEventListener('popstate', (e) => {
-    const backBtn = findInAppBackButton();
-    if (backBtn) {
-      // 找到了小手机内部的返回按钮，模拟点击返回上一层
-      backBtn.click();
-      // 如果还在子页面内，继续压入一层防护网
-      setTimeout(() => {
-        if (findInAppBackButton()) pushGuardState();
-      }, 300);
-    } else {
-      // 已经在小手机桌面了，提示双击退出，防止手滑退到手机系统桌面
-      const now = Date.now();
-      if (now - lastBackPressTime < 1800) {
-        // 允许退出
-      } else {
-        lastBackPressTime = now;
-        pushGuardState();
-        showToast('已在桌面，再次侧滑退出小手机');
-      }
-    }
-  });
-
-  // 初始进入也铺设一次手势防线
-  setTimeout(pushGuardState, 1000);
+  // Navigation has one owner: ShellBackController + the Android dispatcher.
+  // Do not push synthetic history on clicks or maintain another popstate stack.
 
   // ========== 4. 小红书链接自动解析 ==========
   const setReactInputValue = (el, newVal) => {

@@ -1,3 +1,4 @@
+import { ShellBackController } from "@/components/shell-back-controller";
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
@@ -45,6 +46,7 @@ export default function RootLayout({
         <script src="/float-enhancer.js" defer />
       </head>
       <body>
+        <ShellBackController />
         <PWAManifestInjector />
         <PWARegistrar />
         <CSSImportEnhancer />

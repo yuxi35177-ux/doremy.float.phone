@@ -5812,6 +5812,22 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         return () => window.removeEventListener("chat-call-ended", handler);
     }, [session.id, syncMessagesFromStorage]);
 
+    // Transient chat controls own Back before the conversation's page button.
+    useEffect(() => {
+        const back = (event: Event) => {
+            if (event.defaultPrevented || showSettings || !wrapperRef.current?.getClientRects().length) return;
+            if (activeMessageId) { closeContextMenu(); }
+            else if (showPlusMenu || showEmojiPanel || showStickerPanel) {
+                setShowPlusMenu(false); setShowEmojiPanel(false); setShowStickerPanel(false);
+            } else if (isMultiSelectMode) { cancelMultiSelect(); }
+            else if (quotingMessage) { setQuotingMessage(null); }
+            else return;
+            event.preventDefault();
+        };
+        window.addEventListener("float-before-page-back", back);
+        return () => window.removeEventListener("float-before-page-back", back);
+    }, [activeMessageId, showSettings, showPlusMenu, showEmojiPanel, showStickerPanel, isMultiSelectMode, quotingMessage, cancelMultiSelect, closeContextMenu]);
+
     const editingMessage = editingMessageId ? messages.find(m => m.id === editingMessageId) : null;
     const editingSystemInstruction = editingMessage ? isSystemInstructionMessage(editingMessage) : false;
 
