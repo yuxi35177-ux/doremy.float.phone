@@ -27,3 +27,8 @@ export function dispatchOpenAddContact(characterId: string): void {
   if (typeof window === "undefined" || !characterId) return;
   window.dispatchEvent(new CustomEvent(CHAT_OPEN_ADD_CONTACT_EVENT, { detail: { characterId } }));
 }
+
+/** An open conversation suppresses notices only while the page is visible. */
+export function shouldSuppressChatNotice(isTest: boolean, isActiveChat: boolean, pageHidden: boolean): boolean {
+  return !isTest && isActiveChat && !pageHidden;
+}

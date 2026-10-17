@@ -3586,3 +3586,9 @@
   align-items: center;
   justify-content: center;
 }
+
+/* Keep the idle design; avoid recomputing live blur while pages are moving. */
+.phone-shell[data-desktop-swiping="1"][data-widget-effect="glass"] .widget-glass:not(.widget-freestyle) > div:not(.wg-ios-menu):not(.wg-large-time):not(.wg-mood-pill) {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}

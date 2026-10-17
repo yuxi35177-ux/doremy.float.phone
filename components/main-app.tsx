@@ -14,6 +14,8 @@ import { DesktopShell } from "./desktop-shell";
 import { OfflinePushRevampAnnouncement } from "./offline-push-revamp-announcement";
 import { SplashAnimation } from "./splash-animation";
 import { MusicProvider } from "@/lib/music-context";
+import { initializeIdentityWorkspace, watchIdentityWorkspaceChanges } from "@/lib/identity-workspace-controller";
+import { resolveUserIdentity } from "@/lib/settings-storage";
 import { hydrateKvDb, isKvHydrated } from "@/lib/kv-db";
 import { getThemeAssetMap, readThemeProfile } from "@/lib/theme-storage";
 import { resolveActiveIconSkins, type ThemeProfile } from "@/lib/theme-types";
@@ -238,6 +240,7 @@ export function MainApp() {
 
   useEffect(() => {
     let cancelled = false;
+    const stopWorkspaceWatch = watchIdentityWorkspaceChanges();
 
     // 申请持久化存储：批准后 iOS/安卓不会再因存储压力擅自回收 IndexedDB
     // （摊主钥匙、聊天记录等都存在里面）。静默尽力而为，被拒也无碍。
@@ -252,6 +255,13 @@ export function MainApp() {
         setKvHydrateFailed(true);
         return;
       }
+      try {
+        if (!await initializeIdentityWorkspace(resolveUserIdentity()?.id || "__default__")) return;
+      } catch (error) {
+        console.warn("人设存档初始化未完成，保留原数据", error);
+        setKvHydrateFailed(true); return;
+      }
+      if (cancelled) return;
       setKvHydrateFailed(false);
 
       let nextPreparedTheme: PreparedDesktopTheme | null = null;
@@ -272,6 +282,7 @@ export function MainApp() {
     // 安卓全屏兜底。是否请求全屏在每次点击时读取，设置切换后无需重载。
     const isMobile = window.matchMedia("(max-width: 500px) and (hover: none) and (pointer: coarse)").matches;
     if (!isMobile) return () => {
+      stopWorkspaceWatch();
       cancelled = true;
     };
 
@@ -283,6 +294,7 @@ export function MainApp() {
     }
     document.addEventListener("click", tryFullscreen);
     return () => {
+      stopWorkspaceWatch();
       cancelled = true;
       document.removeEventListener("click", tryFullscreen);
     };

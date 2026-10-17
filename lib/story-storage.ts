@@ -1,3 +1,4 @@
+import { registerIdentityDatabase, workspaceDbName } from "./identity-workspace";
 import Dexie from "dexie";
 import { formatChatTimestamp } from "./llm-prompt-assembler";
 import { hydrateKvDb, kvGet, kvSet, registerKvMigration } from "./kv-db";
@@ -401,7 +402,8 @@ class StoryDatabase extends Dexie {
   messages!: Dexie.Table<StoryMessage, string>;
 
   constructor() {
-    super("AiPhoneStoryDB");
+    super(workspaceDbName("AiPhoneStoryDB"));
+        registerIdentityDatabase(this);
     this.version(1).stores({
       sessions: "id, characterId, updatedAt",
       messages: "id, sessionId, createdAt",

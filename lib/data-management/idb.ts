@@ -1,3 +1,4 @@
+import { workspaceDbName, visibleWorkspaceKvKey, workspaceKvKey, IDENTITY_WORKSPACE_KEY, IDENTITY_DEFERRED_REPLIES_KEY } from "../identity-workspace";
 import type {
   ClearResult,
   DataSource,
@@ -141,7 +142,7 @@ function tryReplaceEmptyJsonValue(existingRaw: string, incomingRaw: string): str
 export function deleteDatabase(dbName: string): Promise<void> {
   return new Promise((resolve) => {
     if (!hasIndexedDb()) return resolve();
-    const request = indexedDB.deleteDatabase(dbName);
+    const request = indexedDB.deleteDatabase(workspaceDbName(dbName));
     request.onsuccess = () => resolve();
     request.onerror = () => resolve();
     request.onblocked = () => resolve();
@@ -156,7 +157,7 @@ async function openDb(
 ): Promise<IDBDatabase | null> {
   if (!hasIndexedDb()) return null;
   return new Promise((resolve) => {
-    const request = version ? indexedDB.open(dbName, version) : indexedDB.open(dbName);
+    const request = version ? indexedDB.open(workspaceDbName(dbName), version) : indexedDB.open(workspaceDbName(dbName));
     let settled = false;
     let blockedTimer: ReturnType<typeof setTimeout> | undefined;
     let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
@@ -379,7 +380,8 @@ async function readKvRecords(source: KvSource): Promise<{ key: string; value: st
           const cursor = request.result;
           if (!cursor) return resolve();
           const record = cursor.value as { key: string; value: string };
-          if (matchesKey(record.key, source)) byKey.set(record.key, record);
+          const key = visibleWorkspaceKvKey(record.key);
+          if (key !== null && matchesKey(key, source)) byKey.set(key, { key, value: record.value });
           cursor.continue();
         };
         request.onerror = () => reject(request.error);
@@ -395,7 +397,8 @@ async function readKvRecords(source: KvSource): Promise<{ key: string; value: st
 
   // 内存缓存仍然要并进来：kvSet 是先写缓存再异步落盘，缓存可能比 IndexedDB 新
   for (const record of kvEntries()) {
-    if (matchesKey(record.key, source)) byKey.set(record.key, record);
+    const key = visibleWorkspaceKvKey(record.key);
+          if (key !== null && matchesKey(key, source)) byKey.set(key, { key, value: record.value });
   }
   return Array.from(byKey.values()).sort((a, b) => a.key.localeCompare(b.key));
 }
@@ -413,9 +416,10 @@ async function exportLocalStorageSource(source: LocalStorageSource, collector?: 
   if (typeof window === "undefined") return { type: "localStorage", records: [] };
   const records: { key: string; value: string }[] = [];
   for (let index = 0; index < window.localStorage.length; index += 1) {
-    const key = window.localStorage.key(index);
-    if (!key || !matchesKey(key, source)) continue;
-    const value = window.localStorage.getItem(key);
+    const physical = window.localStorage.key(index);
+    const key = physical ? visibleWorkspaceKvKey(physical) : null;
+    if (key === null || !matchesKey(key, source)) continue;
+    const value = window.localStorage.getItem(physical!);
     if (value !== null) records.push({ key, value: await serializeStorageString(value, collector) });
   }
   return { type: "localStorage", records };
@@ -603,13 +607,14 @@ export async function importSource(
     for (const record of payload.records) {
       // 单条失败（配额满、单条数据损坏）只损失这一条，剩下的照常导入。
       try {
-        const exists = window.localStorage.getItem(record.key) !== null;
+        if ((record.key === IDENTITY_WORKSPACE_KEY || record.key === IDENTITY_DEFERRED_REPLIES_KEY)) { result.skipped += 1; continue; }
+        const exists = window.localStorage.getItem(workspaceKvKey(record.key)) !== null;
         if (exists && !overwrite) {
           result.skipped += 1;
           continue;
         }
         const value = await deserializeStorageString(record.value, resolver);
-        window.localStorage.setItem(record.key, value);
+        window.localStorage.setItem(workspaceKvKey(record.key), value);
         if (exists) result.overwritten += 1;
         else result.added += 1;
       } catch (error) {
@@ -626,6 +631,7 @@ export async function importSource(
       // 逐条兜底：以前整个循环包在一个 try 里，第一条出错后剩余记录全部
       // 静默丢弃——正是「恢复内容不全」的来源之一。
       try {
+        if ((record.key === IDENTITY_WORKSPACE_KEY || record.key === IDENTITY_DEFERRED_REPLIES_KEY)) { result.skipped += 1; continue; }
         const incoming = await deserializeStorageString(record.value, resolver);
         const existing = kvGet(record.key);
         const exists = existing !== null;
@@ -721,7 +727,8 @@ export async function clearSource(source: DataSource): Promise<ClearResult> {
     const keys: string[] = [];
     for (let index = 0; index < window.localStorage.length; index += 1) {
       const key = window.localStorage.key(index);
-      if (key && matchesKey(key, source)) keys.push(key);
+      const logical = key ? visibleWorkspaceKvKey(key) : null;
+      if (key && logical !== null && matchesKey(logical, source)) keys.push(key);
     }
     for (const key of keys) {
       window.localStorage.removeItem(key);
@@ -739,7 +746,7 @@ export async function clearSource(source: DataSource): Promise<ClearResult> {
       const transaction = db.transaction("entries", "readwrite");
       const store = transaction.objectStore("entries");
       for (const record of records) {
-        store.delete(record.key);
+        store.delete(workspaceKvKey(record.key));
         removedKeys.push(record.key);
         result.removed += 1;
       }

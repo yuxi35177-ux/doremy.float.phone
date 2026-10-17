@@ -1,3 +1,5 @@
+import { getWorkspaceIdentityId, isIdentityWorkspaceSwitching } from "./identity-workspace";
+import { switchIdentityWorkspace } from "./identity-workspace-controller";
 import type {
     GenerationParameterKey,
     PresetConfig,
@@ -919,6 +921,17 @@ export function loadBindingConfig(): BindingConfig {
         }
         const normalized = normalizeBindingConfig(JSON.parse(raw) as BindingConfig);
         if (normalized.changed) saveBindingConfig(normalized.config, false);
+        const active = getWorkspaceIdentityId();
+        if (active) {
+            const align = (value: unknown) => {
+                if (!value || typeof value !== "object") return;
+                Object.entries(value).forEach(([key, child]) => {
+                    if (key === "userIdentityId") (value as Record<string, unknown>)[key] = active;
+                    else align(child);
+                });
+            };
+            align(normalized.config); normalized.config.globalDefaults.userIdentityId = active;
+        }
         return normalized.config;
     } catch {
         return { ...DEFAULT_BINDING_CONFIG };
@@ -927,6 +940,34 @@ export function loadBindingConfig(): BindingConfig {
 
 export function saveBindingConfig(config: BindingConfig, notify: boolean = true): void {
     if (typeof window === "undefined") return;
+    if (isIdentityWorkspaceSwitching()) return;
+    if (notify && getWorkspaceIdentityId()) {
+        const before = loadBindingConfig();
+        const collect = (value: unknown, path = "", out = new Map<string, string>()): Map<string, string> => {
+            if (value && typeof value === "object") Object.entries(value).forEach(([key, child]) => {
+                if (key === "userIdentityId" && typeof child === "string") out.set(path + "." + key, child);
+                else if (child && typeof child === "object") collect(child, path + "." + key, out);
+            });
+            return out;
+        };
+        const previous = collect(before);
+        const changed = [...collect(config)].find(([path, id]) => previous.get(path) !== id && id !== getWorkspaceIdentityId());
+        if (changed && loadUserIdentities().some(identity => identity.id === changed[1])) {
+            const id = changed[1];
+            const next = structuredClone(config);
+            // A persona now selects a whole archive, including all conversations.
+            const clearOverrides = (value: unknown) => {
+                if (!value || typeof value !== "object") return;
+                Object.entries(value).forEach(([key, child]) => {
+                    if (key === "userIdentityId") delete (value as Record<string, unknown>)[key];
+                    else clearOverrides(child);
+                });
+            };
+            clearOverrides(next); next.globalDefaults.userIdentityId = id;
+            void switchIdentityWorkspace(id, JSON.stringify(next)).catch(error => console.warn("人设切换未完成", error));
+            return;
+        }
+    }
     kvSet(BINDINGS_KEY, JSON.stringify(config));
     if (notify) window.dispatchEvent(new CustomEvent("settings-bindings-updated"));
 }
@@ -1215,8 +1256,19 @@ export function loadUserIdentities(): UserIdentity[] {
 
 export function saveUserIdentities(identities: UserIdentity[]): void {
     if (typeof window === "undefined") return;
+    const active = getWorkspaceIdentityId();
+    if (active && active !== "__default__" && !identities.some(identity => identity.id === active)) {
+        window.alert("请先切换到其他人设，再删除当前人设。旧存档不会随删除卡片清除。");
+        return;
+    }
     kvSet(USER_IDENTITIES_KEY, JSON.stringify(identities));
     window.dispatchEvent(new CustomEvent(USER_IDENTITIES_UPDATED_EVENT));
+}
+
+export function activateUserIdentity(id: string): void {
+    if (!loadUserIdentities().some(identity => identity.id === id)) throw new Error("用户人设不存在。");
+    const config = loadBindingConfig();
+    saveBindingConfig({ ...config, globalDefaults: { ...config.globalDefaults, userIdentityId: id } });
 }
 
 export const USER_IDENTITIES_UPDATED_EVENT = "user-identities-updated";
@@ -1229,6 +1281,8 @@ export const USER_IDENTITIES_UPDATED_EVENT = "user-identities-updated";
 export function resolveUserIdentity(characterId?: string, appId?: string): UserIdentity | null {
     const identities = loadUserIdentities();
     if (identities.length === 0) return null;
+    const workspaceId = getWorkspaceIdentityId();
+    if (workspaceId) return identities.find(identity => identity.id === workspaceId) || null;
     const config = loadBindingConfig();
     const resolved = resolveBinding(config, characterId, appId);
     if (resolved.userIdentityId) {

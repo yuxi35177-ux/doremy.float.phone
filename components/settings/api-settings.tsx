@@ -1,4 +1,6 @@
 "use client";
+import { localApiFetch, isLoopbackApiUrl } from "@/lib/local-api-fetch";
+
 
 import { useState, useEffect, useCallback, useContext } from "react";
 import { Plus, RefreshCw, Rss, AlertCircle, FileEdit, Trash2, X, Check } from "lucide-react";
@@ -131,10 +133,10 @@ export function ApiSettings() {
             const url = isGoogleNative
                 ? `${modelsUrl}?key=${encodeURIComponent(config.apiKey)}`
                 : modelsUrl;
-            const headers: Record<string, string> = { "Content-Type": "application/json" };
+            const headers: Record<string, string> = {};
             if (!isGoogleNative) headers["Authorization"] = `Bearer ${config.apiKey}`;
 
-            const response = await fetch(url, { method: "GET", headers });
+            const response = await localApiFetch(url, { method: "GET", headers });
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -348,6 +350,11 @@ export function ApiSettings() {
                                                             : "默认用官方端点，留空即可"
                                                 }
                                             />
+                                            {isLoopbackApiUrl(config.baseUrl || "") && (
+                                                <p className="mt-2 text-xs text-gray-500">
+                                                    本机接口：服务须运行在这部手机上。APK 需支持本地 API；浏览器需服务端允许跨域并授予本地网络权限。
+                                                </p>
+                                            )}
                                         </div>
 
                                         <div className="flex flex-col gap-1">

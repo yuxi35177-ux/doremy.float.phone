@@ -1,3 +1,4 @@
+import { getWorkspaceIdentityId } from "../identity-workspace";
 import JSZip from "jszip";
 import { downloadFile, type DownloadFileOptions } from "../download-utils";
 import { sha256BlobHex } from "../sha256-stream";
@@ -307,6 +308,7 @@ async function buildEnvelope(moduleIds?: DataModuleId[], options: BackupOptions 
 
   const manifest: BackupManifest = {
     format: "ai-phone-backup",
+    identityId: getWorkspaceIdentityId() ?? undefined,
     // v2 only when media was actually extracted to binary entries (collector present).
     version: collector ? 2 : 1,
     createdAt: new Date().toISOString(),
@@ -403,6 +405,7 @@ export async function createBackupBlob(moduleIds?: DataModuleId[], options: Back
 
   const manifest: BackupManifest = {
     format: "ai-phone-backup",
+    identityId: getWorkspaceIdentityId() ?? undefined,
     version: BACKUP_FILE_VERSION,
     createdAt: new Date().toISOString(),
     origin: typeof window !== "undefined" ? window.location.origin : "",

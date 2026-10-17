@@ -1,3 +1,4 @@
+import { workspaceDbName } from "./identity-workspace";
 import { getMascotContext, type MascotPageContext } from "./mascot-context";
 import { mascotFillField } from "./mascot-events";
 import {
@@ -59,7 +60,7 @@ let abortController: AbortController | null = null;
 let snapshot: MascotChatSnapshot = { messages, sessions, activeSessionId, hydrated, isThinking };
 
 function openMascotDb(): IDBOpenDBRequest {
-    const request = indexedDB.open(MASCOT_DB_NAME, MASCOT_DB_VERSION);
+    const request = indexedDB.open(workspaceDbName(MASCOT_DB_NAME), MASCOT_DB_VERSION);
     request.onupgradeneeded = () => {
         if (!request.result.objectStoreNames.contains(MASCOT_CHAT_STORE)) {
             request.result.createObjectStore(MASCOT_CHAT_STORE);

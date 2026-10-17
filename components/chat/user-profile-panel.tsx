@@ -29,6 +29,8 @@ import { loadChatContacts } from "@/lib/chat-storage";
 import { loadCharacters } from "@/lib/character-storage";
 import { triggerImmediatePost } from "@/lib/moments-engine";
 import type { Character } from "@/lib/character-types";
+import { isSelfHostedModeEnabled } from "@/lib/self-hosting";
+import { isShellNotificationEnabled, setShellNotificationEnabled, testShellNotification, openShellNotificationSettings } from "@/lib/shell-notify";
 import { requestNotificationPermission } from "@/lib/browser-notification";
 import { disableOfflinePush, enableOfflinePush, getOfflinePushState, isShellEnvironment, loadPushQuietHours, savePushQuietHours, sendTestOfflinePush, type OfflinePushState } from "@/lib/push-client";
 import { isPersonalPushCloudActive, setPersonalPushCloudScheduled } from "@/lib/personal-push-cloud";
@@ -475,8 +477,8 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                         <button className="flex items-center gap-3 py-3.5 w-full" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowPushSettings(true); }}>
                             <Satellite size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
                             <div className="flex flex-col flex-1 text-left gap-0.5">
-                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">离线推送与定时消息</span>
-                                <span className="ts-11 text-[var(--c-text)] opacity-70">关掉后台也能收到推送、安静时段、定时主动消息</span>
+                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">通知与定时消息</span>
+                                <span className="ts-11 text-[var(--c-text)] opacity-70">本地系统通知、云端推送与定时主动消息</span>
                             </div>
                             <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50" />
                         </button>
@@ -1237,6 +1239,8 @@ function InlineMomentsSettings({ onBack }: { onBack: () => void }) {
 function OfflinePushSettingsPage({ onBack }: { onBack: () => void }) {
     const [offlinePushState, setOfflinePushState] = useState<OfflinePushState>("unsupported");
     const [isShellApp, setIsShellApp] = useState(false);
+    const [localNotifications, setLocalNotifications] = useState(true);
+    const [localNoticeHint, setLocalNoticeHint] = useState("");
     const [offlinePushBusy, setOfflinePushBusy] = useState(false);
     const [offlinePushHint, setOfflinePushHint] = useState<string | null>(null);
     const [personalCloudActive, setPersonalCloudActive] = useState(false);
@@ -1281,6 +1285,7 @@ function OfflinePushSettingsPage({ onBack }: { onBack: () => void }) {
 
     useEffect(() => {
         setIsShellApp(isShellEnvironment());
+        setLocalNotifications(isShellNotificationEnabled());
         setPersonalCloudActive(isPersonalPushCloudActive());
         void getOfflinePushState().then(setOfflinePushState);
         refreshTimedSchedules();
@@ -1313,10 +1318,10 @@ function OfflinePushSettingsPage({ onBack }: { onBack: () => void }) {
     const handleOfflinePushTest = async () => {
         if (offlinePushBusy) return;
         setOfflinePushBusy(true);
-        setOfflinePushHint("已安排测试推送：现在就杀掉后台，约 6 秒后送达。");
+        setOfflinePushHint("正在请求云端测试推送…");
         try {
             const result = await sendTestOfflinePush();
-            if (!result.ok) setOfflinePushHint(result.error || "发送失败。");
+            setOfflinePushHint(result.ok ? "云端测试已提交，约 6 秒后检查通知。" : result.error || "发送失败。");
         } finally {
             setOfflinePushBusy(false);
         }
@@ -1416,8 +1421,32 @@ function OfflinePushSettingsPage({ onBack }: { onBack: () => void }) {
 
     return (
       <>
-        <PageShell title="离线推送" onBack={onBack} className="absolute inset-0 z-[100]">
+        <PageShell title="通知与定时消息" onBack={onBack} className="absolute inset-0 z-[100]">
             <div className="page-menu profile-settings-menu">
+                {isShellApp && <>
+                    <p className="menu-group-desc mx-2">本地系统通知 · 无需云端</p>
+                    <div className="menu-group">
+                        <div className="menu-item">
+                            <ProfileSettingsIcon icon={Bell} color={BINDING_ACCENTS.api} />
+                            <div className="menu-label-group">
+                                <span className="menu-label">本地系统通知</span>
+                                <span className="menu-desc">页面运行且收到角色消息时，由 APK 直接通知</span>
+                            </div>
+                            <Toggle checked={localNotifications} onChange={enabled => {
+                                setShellNotificationEnabled(enabled); setLocalNotifications(enabled); setLocalNoticeHint("");
+                            }} />
+                        </div>
+                        <button className="menu-item" onClick={() => setLocalNoticeHint(testShellNotification().message)}>
+                            <Bell size={18} /><span className="menu-label">测试本地通知</span>
+                        </button>
+                        <button className="menu-item" onClick={() => {
+                            if (!openShellNotificationSettings()) setLocalNoticeHint("无法打开系统设置，请到手机设置 → 应用 → 小手机 → 通知管理。");
+                        }}>
+                            <ChevronRight size={18} /><span className="menu-label">打开系统通知设置</span>
+                        </button>
+                    </div>
+                    <p className="menu-group-desc mx-2">{localNoticeHint || "允许小手机的通知、悬浮通知及锁屏通知。后台仍在生成时可直接通知；彻底结束 App 后的云端生成属于下方独立功能。"}</p>
+                </>}
                 {(
                     <>
                         <p className="menu-group-desc mx-2">运行位置</p>
@@ -1470,15 +1499,15 @@ function OfflinePushSettingsPage({ onBack }: { onBack: () => void }) {
                             <div className="menu-item">
                                 <ProfileSettingsIcon icon={Satellite} color={BINDING_ACCENTS.api} />
                                 <div className="menu-label-group">
-                                    <span className="menu-label">离线推送</span>
+                                    <span className="menu-label">云端离线推送</span>
                                     <span className="menu-desc">关掉后台后仍由系统推送通知（本设备）</span>
                                 </div>
                                 <div className="menu-right flex items-center gap-2">
-                                    {(offlinePushState === "on" || isShellApp) && (
+                                    {(offlinePushState === "on") && (
                                         <button className="ui-btn ui-btn-outline py-1 px-2 ts-11" style={{ whiteSpace: "nowrap" }} onClick={() => void handleOfflinePushTest()} disabled={offlinePushBusy}>测试</button>
                                     )}
                                     <Toggle
-                                        checked={offlinePushState === "on" || isShellApp}
+                                        checked={offlinePushState === "on"}
                                         disabled={offlinePushBusy || isShellApp || offlinePushState === "unsupported"}
                                         onChange={enabled => void handleOfflinePushToggle(enabled)}
                                     />
@@ -1520,7 +1549,7 @@ function OfflinePushSettingsPage({ onBack }: { onBack: () => void }) {
                         </div>
                         <p className="menu-group-desc mx-2">
                             {offlinePushHint || (isShellApp
-                                ? "App 版自带推送通道，已自动接管离线推送；保持系统通知权限开启即可，可点「测试」验证。"
+                                ? (isSelfHostedModeEnabled() && !personalCloudActive ? "未配置云端离线推送，不影响上方本地系统通知。" : "云端推送通道由 APK 接管；系统通知权限仍需开启。")
                                 : offlinePushState === "unsupported" ? "当前环境不支持。iOS 请先添加到主屏幕，从主屏幕打开后再开启。" : "")}
                         </p>
                     </>

@@ -1,3 +1,4 @@
+import { localApiFetch, isLoopbackApiUrl } from "./local-api-fetch";
 // lib/llm-http.ts
 // LLM 请求的统一 fetch 出口。所有走 buildProviderRequest 的调用点统一经它发请求：
 //  - 普通 provider：浏览器直连（现状不变）；
@@ -15,7 +16,7 @@ export function fetchLlmPayload(
     options: FetchLlmPayloadOptions = {},
 ): Promise<Response> {
     const bodyText = JSON.stringify(payload.body);
-    if (payload.serverProxy) {
+    if (payload.serverProxy && !isLoopbackApiUrl(payload.url)) {
         return fetch("/api/llm-proxy", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -27,7 +28,7 @@ export function fetchLlmPayload(
             signal: options.signal,
         });
     }
-    return fetch(payload.url, {
+    return localApiFetch(payload.url, {
         method: "POST",
         headers: payload.headers,
         body: bodyText,

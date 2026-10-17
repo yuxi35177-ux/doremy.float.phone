@@ -1,3 +1,4 @@
+import { registerIdentityDatabase, workspaceDbName, workspaceKvKey } from "./identity-workspace";
 // lib/chat-db.ts
 // IndexedDB persistence layer for chat data using Dexie.js.
 // Provides async persistence behind the synchronous in-memory cache in chat-storage.ts.
@@ -13,7 +14,8 @@ class ChatDatabase extends Dexie {
     contacts!: Dexie.Table<ChatContact, string>;
 
     constructor() {
-        super("AiPhoneChatDB");
+        super(workspaceDbName("AiPhoneChatDB"));
+        registerIdentityDatabase(this);
         this.version(1).stores({
             messages: "id, sessionId, createdAt",
             sessions: "id, contactId",
@@ -26,10 +28,10 @@ export const chatDb = new ChatDatabase();
 
 // ── Initialization + Migration from localStorage ──
 
-const LS_MESSAGES_KEY = "ai_phone_chat_messages_v1";
-const LS_SESSIONS_KEY = "ai_phone_chat_sessions_v1";
-const LS_CONTACTS_KEY = "ai_phone_chat_contacts_v1";
-const LS_MIGRATED_FLAG = "ai_phone_idb_migrated_v1";
+const LS_MESSAGES_KEY = workspaceKvKey("ai_phone_chat_messages_v1");
+const LS_SESSIONS_KEY = workspaceKvKey("ai_phone_chat_sessions_v1");
+const LS_CONTACTS_KEY = workspaceKvKey("ai_phone_chat_contacts_v1");
+const LS_MIGRATED_FLAG = workspaceKvKey("ai_phone_idb_migrated_v1");
 
 /**
  * Initialize IndexedDB and migrate data from localStorage if needed.

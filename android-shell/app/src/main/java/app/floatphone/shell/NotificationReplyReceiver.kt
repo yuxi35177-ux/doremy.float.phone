@@ -28,6 +28,7 @@ class NotificationReplyReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_REPLY = "app.floatphone.shell.NOTIF_REPLY"
         const val EXTRA_SESSION_ID = "session_id"
+        const val EXTRA_IDENTITY_ID = "identity_id"
 
         /** RemoteInput 的键名；发通知与读结果必须用同一个。 */
         const val KEY_REPLY_TEXT = "reply_text"
@@ -39,7 +40,7 @@ class NotificationReplyReceiver : BroadcastReceiver() {
         private const val MAX_QUEUE = 20
 
         /** 追加一条待发回复。 */
-        fun enqueue(context: Context, sessionId: String, text: String) {
+        fun enqueue(context: Context, sessionId: String, text: String, identityId: String = "") {
             runCatching {
                 val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 val current = JSONArray(prefs.getString(KEY_QUEUE, "[]") ?: "[]")
@@ -47,6 +48,7 @@ class NotificationReplyReceiver : BroadcastReceiver() {
                     JSONObject()
                         .put("id", "r_${System.currentTimeMillis()}_${(0..9999).random()}")
                         .put("sessionId", sessionId)
+                        .put("identityId", identityId)
                         .put("text", text)
                         .put("at", System.currentTimeMillis()),
                 )
@@ -78,7 +80,7 @@ class NotificationReplyReceiver : BroadcastReceiver() {
         if (text.isEmpty()) return
 
         // 先落队列：无论页面现在活不活着，这句话都不会丢。
-        enqueue(context, sessionId, text)
+        enqueue(context, sessionId, text, intent.getStringExtra(EXTRA_IDENTITY_ID).orEmpty())
 
         if (ShellBus.isWebAlive()) {
             // 页面还在（App 只是切到后台）：戳一下，它立刻把队列拉走发出去。

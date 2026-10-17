@@ -136,6 +136,7 @@ export type DataSnapshot = {
 
 export type BackupManifest = {
   format: "ai-phone-backup";
+  identityId?: string; // Experiences in this archive belong to this persona; routing is not restored.
   /** 1 = media inlined as base64; 2 = media stored as separate binary entries (media/<ref>.bin). */
   version: 1 | 2;
   createdAt: string;

@@ -1245,3 +1245,11 @@ export async function parseAndSaveResponse(
 
     return { hasVisible: true, newCount: currentCount + 1, stateValues };
 }
+
+if (typeof window !== "undefined") {
+    window.addEventListener("identity-workspace-before-switch", () => {
+        stopFollowUpService();
+        backgroundGeneratingSessions.forEach(id => cancelledBackgroundSessions.add(id));
+        firingSet.forEach(id => cancelledWhileFiring.add(id));
+    });
+}

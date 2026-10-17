@@ -1,5 +1,7 @@
 package app.floatphone.shell
 
+import android.net.Uri
+
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -236,7 +238,7 @@ class PushService : Service() {
                         }.isSuccess
                         if (shown) return
                     }
-                    showMessageNotification(title, text2, body.optString("sessionId"), body.optString("avatar"))
+                    showMessageNotification(title, text2, body.optString("sessionId"), body.optString("avatar"), body.optString("identityId"))
                 }
             }
 
@@ -378,7 +380,7 @@ class PushService : Service() {
         getSystemService(NotificationManager::class.java).notify(CallAlert.NOTIF_MISSED_ID, notification)
     }
 
-    private fun showMessageNotification(title: String, body: String, sessionId: String? = null, avatarUrl: String? = null) {
+    private fun showMessageNotification(title: String, body: String, sessionId: String? = null, avatarUrl: String? = null, identityId: String = "") {
         val builder = NotificationCompat.Builder(this, CH_MESSAGES)
             .setSmallIcon(R.drawable.ic_stat)
             .setContentTitle(title)
@@ -393,7 +395,7 @@ class PushService : Service() {
         // 带「回复」按钮：用户可以直接在通知横幅上回一句，不用点开 App。
         // 没有 sessionId 的通知（系统提醒类）挂了也没处送，所以只在有时才加。
         val sid = sessionId?.trim().orEmpty()
-        if (sid.isNotEmpty()) builder.addAction(buildReplyAction(sid))
+        if (sid.isNotEmpty()) builder.addAction(buildReplyAction(sid, identityId))
         getSystemService(NotificationManager::class.java).notify(notifId++, builder.build())
         if (notifId > 400) notifId = 100
     }
@@ -404,13 +406,15 @@ class PushService : Service() {
      * PendingIntent 必须是 MUTABLE：用户输入要先被系统填进 RemoteInput，
      * 不可变的 PendingIntent 装不下这个结果，回复框会打不开。
      */
-    private fun buildReplyAction(sessionId: String): NotificationCompat.Action {
+    private fun buildReplyAction(sessionId: String, identityId: String = ""): NotificationCompat.Action {
         val remoteInput = RemoteInput.Builder(NotificationReplyReceiver.KEY_REPLY_TEXT)
             .setLabel("回复")
             .build()
         val intent = Intent(this, NotificationReplyReceiver::class.java).apply {
             action = NotificationReplyReceiver.ACTION_REPLY
             putExtra(NotificationReplyReceiver.EXTRA_SESSION_ID, sessionId)
+            putExtra(NotificationReplyReceiver.EXTRA_IDENTITY_ID, identityId)
+            data = Uri.parse("floatshell://reply/${Uri.encode(identityId)}/${Uri.encode(sessionId)}")
         }
         // requestCode 用 sessionId 的哈希：不同会话各自一个 PendingIntent，
         // 否则 FLAG_UPDATE_CURRENT 会让后一条通知顶掉前一条的回复目标。

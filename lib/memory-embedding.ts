@@ -1,3 +1,4 @@
+import { localApiFetch } from "./local-api-fetch";
 // lib/memory-embedding.ts
 // Embedding generation + vector/keyword search for memory retrieval.
 
@@ -60,7 +61,7 @@ export async function generateEmbedding(
     const headers = buildRequestHeaders(apiConfig, baseUrl);
 
     try {
-        const res = await fetch(url, {
+        const res = await localApiFetch(url, {
             method: "POST",
             headers,
             body: JSON.stringify({

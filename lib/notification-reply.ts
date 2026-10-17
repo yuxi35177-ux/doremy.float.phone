@@ -10,7 +10,9 @@
 // 消息落库）整个跑在 WebView 的 JS 里，原生没有那套逻辑。原生只负责
 // 「别把用户打的字弄丢」——这是它唯一能可靠承担的职责。
 
-import { loadChatSessions, pushChatMessage } from "./chat-storage";
+import { IDENTITY_DEFERRED_REPLIES_KEY, isIdentityWorkspaceSwitching, getIdentityWorkspace } from "./identity-workspace";
+import { kvGet, kvSetAsync } from "./kv-db";
+import { loadChatSessions, pushChatMessage, hydrateChatStorage } from "./chat-storage";
 import { requestBackgroundChatReply } from "./follow-up-service";
 import { ensureShellOverlayListener, subscribeShellOverlayEvents } from "./shell-call-overlay";
 
@@ -33,6 +35,7 @@ export function hasNotificationReplyBridge(): boolean {
 export type PendingNotificationReply = {
     id: string;
     sessionId: string;
+    identityId?: string;
     text: string;
     /** 用户按下发送的时刻（原生记的墙钟），仅用于排查 */
     at: number;
@@ -63,15 +66,34 @@ export function readPendingReplies(): PendingNotificationReply[] {
  * 会话已被删除时跳过——一条无归属的回复写不进去，也不该硬造一个会话。
  * 返回实际发出的条数。
  */
-export async function flushPendingNotificationReplies(): Promise<number> {
-    const pending = readPendingReplies();
+let pendingFlush: Promise<number> | null = null;
+export function flushPendingNotificationReplies(): Promise<number> {
+    if (pendingFlush) return pendingFlush;
+    pendingFlush = flushRepliesForCurrentWorkspace().finally(() => { pendingFlush = null; });
+    return pendingFlush;
+}
+async function flushRepliesForCurrentWorkspace(): Promise<number> {
+    await hydrateChatStorage();
+    if (isIdentityWorkspaceSwitching()) return 0;
+    let deferred: PendingNotificationReply[] = [];
+    try { deferred = JSON.parse(kvGet(IDENTITY_DEFERRED_REPLIES_KEY) || "[]"); } catch { /* Keep native queue processing available. */ }
+    const pending = [...new Map([...deferred, ...readPendingReplies()].map(item => [item.id || `${item.sessionId}:${item.at}:${item.text}`, item])).values()];
     if (pending.length === 0) return 0;
 
     const sessionIds = new Set(loadChatSessions().map(s => s.id));
+    const workspace = getIdentityWorkspace();
+    const belongsHere = (item: PendingNotificationReply) => sessionIds.has(item.sessionId) && (
+        item.identityId ? item.identityId === workspace?.activeId
+            : !workspace
+    );
+    // Untagged pre-upgrade/cloud replies cannot safely select a new persona.
+    const otherWorkspaces = pending.filter(item => !belongsHere(item));
+    // Native queues are consumed globally. Keep replies for another persona until it is active.
+    await kvSetAsync(IDENTITY_DEFERRED_REPLIES_KEY, JSON.stringify(otherWorkspaces));
     let sent = 0;
     const touched = new Set<string>();
     for (const item of pending) {
-        if (!sessionIds.has(item.sessionId)) continue;
+        if (!belongsHere(item)) continue;
         const text = item.text.trim();
         if (!text) continue;
         pushChatMessage({ sessionId: item.sessionId, role: "user", content: text });

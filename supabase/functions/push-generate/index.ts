@@ -274,7 +274,7 @@ type JobPayload = {
     imageMarker?: string;
     style: "text" | "native";
   };
-  notify?: { title?: string; url?: string };
+  notify?: { title?: string; url?: string; avatar?: string; identityId?: string };
   /** 角色绑定的微信 bot：force 用于真实微信快捷动作结果续跑，保证第二轮仍回到微信。 */
   weixin?: { botId?: string; force?: boolean };
   /** 离线快捷动作的结果续跑快照：客户端预挂，AI 调用需回传的动作时武装 shortcut_resume */
@@ -1186,6 +1186,7 @@ Deno.serve(async (req: Request) => {
                   // sessionId 让壳点击通知直达对应会话（普通消息原先没有，点开只回桌面）；
                   // avatar 是角色头像（data URL 或直链），有就当通知大图标，没有壳用默认图。
                   ...(callSessionId ? { sessionId: callSessionId } : {}),
+                  ...(typeof payload.notify?.identityId === "string" ? { identityId: payload.notify.identityId } : {}),
                   ...(typeof payload.notify?.avatar === "string" && payload.notify.avatar
                     ? { avatar: payload.notify.avatar }
                     : {}),
