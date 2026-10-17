@@ -60,7 +60,7 @@
       if (this === localStorage) {
         const k = String(key);
         const v = String(value);
-        if (memCache.get(k) === v) return; // 内容未变跳过写入，消除无效序列化卡顿
+        if (memCache.get(k) === v) return;
         memCache.set(k, v);
         pendingWrites.set(k, v);
         scheduleFlush();
@@ -108,16 +108,14 @@
       -webkit-overflow-scrolling: touch;
       overscroll-behavior-y: contain;
     }
-    #float-swipe-indicator {
+    .float-swipe-indicator {
       position: fixed;
       top: 50%;
-      left: 0;
       width: 28px;
       height: 76px;
       margin-top: -38px;
       background: rgba(0, 0, 0, 0.45);
       color: #fff;
-      border-radius: 0 18px 18px 0;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -125,8 +123,17 @@
       z-index: 999999;
       pointer-events: none;
       opacity: 0;
-      transform: translateX(-100%);
       transition: opacity 0.15s ease;
+    }
+    #float-swipe-left {
+      left: 0;
+      border-radius: 0 18px 18px 0;
+      transform: translateX(-100%);
+    }
+    #float-swipe-right {
+      right: 0;
+      border-radius: 18px 0 0 18px;
+      transform: translateX(100%);
     }
     #float-xhs-toast {
       position: fixed;
@@ -148,12 +155,25 @@
   `;
   document.head.appendChild(style);
 
-  // ========== 3. 全局屏幕边缘滑动返回手势 ==========
-  const indicator = document.createElement('div');
-  indicator.id = 'float-swipe-indicator';
-  indicator.textContent = '‹';
-  document.addEventListener('DOMContentLoaded', () => document.body.appendChild(indicator));
-  if (document.body) document.body.appendChild(indicator);
+  // ========== 3. 全局屏幕左右双侧边缘滑动返回手势 ==========
+  const leftInd = document.createElement('div');
+  leftInd.id = 'float-swipe-left';
+  leftInd.className = 'float-swipe-indicator';
+  leftInd.textContent = '‹';
+
+  const rightInd = document.createElement('div');
+  rightInd.id = 'float-swipe-right';
+  rightInd.className = 'float-swipe-indicator';
+  rightInd.textContent = '›';
+
+  const appendIndicators = () => {
+    if (document.body) {
+      if (!document.getElementById('float-swipe-left')) document.body.appendChild(leftInd);
+      if (!document.getElementById('float-swipe-right')) document.body.appendChild(rightInd);
+    }
+  };
+  document.addEventListener('DOMContentLoaded', appendIndicators);
+  appendIndicators();
 
   const triggerSmartBack = () => {
     const candidates = Array.from(
@@ -188,7 +208,7 @@
 
   let startX = 0;
   let startY = 0;
-  let trackingEdge = false;
+  let edgeType = null; // 'left' | 'right' | null
 
   window.addEventListener(
     'touchstart',
@@ -196,12 +216,16 @@
       if (e.touches.length !== 1) return;
       const touch = e.touches[0];
       const w = window.innerWidth;
-      if (touch.clientX <= 28 || touch.clientX >= w - 28) {
+      if (touch.clientX <= 28) {
         startX = touch.clientX;
         startY = touch.clientY;
-        trackingEdge = true;
+        edgeType = 'left';
+      } else if (touch.clientX >= w - 28) {
+        startX = touch.clientX;
+        startY = touch.clientY;
+        edgeType = 'right';
       } else {
-        trackingEdge = false;
+        edgeType = null;
       }
     },
     { passive: true }
@@ -210,19 +234,25 @@
   window.addEventListener(
     'touchmove',
     (e) => {
-      if (!trackingEdge || e.touches.length !== 1) return;
+      if (!edgeType || e.touches.length !== 1) return;
       const touch = e.touches[0];
       const dx = Math.abs(touch.clientX - startX);
       const dy = Math.abs(touch.clientY - startY);
       if (dy > 45) {
-        trackingEdge = false;
-        indicator.style.opacity = '0';
+        edgeType = null;
+        leftInd.style.opacity = '0';
+        rightInd.style.opacity = '0';
         return;
       }
       if (dx > 12) {
         const progress = Math.min(dx / 65, 1);
-        indicator.style.opacity = String(progress);
-        indicator.style.transform = `translateX(${(progress - 1) * 100}%)`;
+        if (edgeType === 'left') {
+          leftInd.style.opacity = String(progress);
+          leftInd.style.transform = `translateX(${(progress - 1) * 100}%)`;
+        } else if (edgeType === 'right') {
+          rightInd.style.opacity = String(progress);
+          rightInd.style.transform = `translateX(${(1 - progress) * 100}%)`;
+        }
       }
     },
     { passive: true }
@@ -231,15 +261,19 @@
   window.addEventListener(
     'touchend',
     (e) => {
-      if (!trackingEdge) return;
-      trackingEdge = false;
-      indicator.style.opacity = '0';
-      indicator.style.transform = 'translateX(-100%)';
+      if (!edgeType) return;
+      const currentEdge = edgeType;
+      edgeType = null;
+      leftInd.style.opacity = '0';
+      rightInd.style.opacity = '0';
+      leftInd.style.transform = 'translateX(-100%)';
+      rightInd.style.transform = 'translateX(100%)';
+
       const touch = e.changedTouches[0];
       if (!touch) return;
       const dx = Math.abs(touch.clientX - startX);
       const dy = Math.abs(touch.clientY - startY);
-      if (dx >= 62 && dy < 45) {
+      if (dx >= 60 && dy < 45) {
         triggerSmartBack();
       }
     },
