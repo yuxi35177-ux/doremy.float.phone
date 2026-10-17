@@ -2,9 +2,9 @@
 
 ## 当前状态
 
-五项功能已在目标仓库的本地开发分支实现并按功能提交。**尚未推送远端，也尚未创建 PR。**
-GitHub 连接在创建目标仓库分支时返回 HTTP 403：`Resource not accessible by integration`。
-命令行没有 GitHub 写入凭据。没有绕过授权，没有在来源仓库代建分支。
+五项功能已在目标仓库开发分支实现并按功能提交，等待人工审查及实机测试。
+最初 GitHub 连接返回 HTTP 403：`Resource not accessible by integration`；仓库所有者安装并授权对应 GitHub App 后，已成功创建目标远端同步分支。
+提交通过已授权的 GitHub 接口上传，各文件对象和每个提交的目录树均与本地验证版本核对。没有绕过授权，没有在来源仓库代建分支。
 
 - 来源：`gugugudaxi-sketch/doremy.float.phone`
 - 来源检查时 HEAD：`f8f9a4a04efe5676e269e3fe8227693b2c922f64`
@@ -61,7 +61,7 @@ Android `compileDebugKotlin`：通过（BUILD SUCCESSFUL）。本地补齐 JDK 1
 
 交付包的 `patches/` 是按顺序生成的 git format-patch，保留独立提交；也提供只含新增提交的增量 bundle。
 
-有权限后先读取目标最新 main，若已变化须分析新差异，不得直接覆盖或强推。
+授权恢复后已重新读取目标 main，仍为上述基准 SHA。未来恢复时须再次检查；若已变化须分析新差异，不得直接覆盖或强推。
 在目标仓库新开发分支应用补丁（不要在 main 应用），完成最终检查后推送该分支并创建指向 main 的 PR。
 如果已存在同名分支，先检查内容；不能未经核对覆盖。不得自动合并、发布或修改部署。
 
