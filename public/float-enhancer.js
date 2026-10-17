@@ -1,34 +1,73 @@
 (function () {
-  if (window.__FLOAT_ENHANCER_LOADED__) return;
-  window.__FLOAT_ENHANCER_LOADED__ = true;
+  if (window.__FLOAT_PERF_V2_LOADED__) return;
+  window.__FLOAT_PERF_V2_LOADED__ = true;
 
-  // ========== 1. 底层防卡顿：localStorage 内存高速缓存 + 异步批量落盘 ==========
+  // ========== 1. 终极性能暴力解脱：干掉安卓 WebView 的显卡杀手（实时模糊） ==========
+  const style = document.createElement('style');
+  style.id = 'float-nuclear-perf';
+  style.textContent = `
+    * {
+      -webkit-tap-highlight-color: transparent !important;
+      outline: none !important;
+    }
+    /* 彻底关闭导致安卓掉帧卡顿的 backdrop-filter 实时显卡拷贝，换成丝滑高透背景 */
+    [class*="backdrop-blur"],
+    [style*="backdrop-filter"],
+    [class*="bg-white/"],
+    [class*="bg-black/"] {
+      -webkit-backdrop-filter: none !important;
+      backdrop-filter: none !important;
+    }
+    /* 强制所有可滚动列表启用 GPU 异步图层与原生惯性滑动 */
+    main, [class*="overflow-y-auto"], [class*="scroll"], ul, ol {
+      -webkit-overflow-scrolling: touch !important;
+      overscroll-behavior-y: contain !important;
+      touch-action: pan-y !important;
+      transform: translateZ(0);
+    }
+    /* 提示条样式 */
+    #float-toast {
+      position: fixed;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(30, 30, 35, 0.92);
+      color: #fff;
+      padding: 8px 18px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 500;
+      z-index: 9999999;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+      opacity: 0;
+    }
+  `;
+  document.head.appendChild(style);
+
+  // ========== 2. 内存防卡顿：localStorage 内存镜像防阻塞 ==========
   try {
     const rawGet = Storage.prototype.getItem;
     const rawSet = Storage.prototype.setItem;
     const rawRemove = Storage.prototype.removeItem;
     const rawClear = Storage.prototype.clear;
-
     const memCache = new Map();
     const pendingWrites = new Map();
     let flushTimer = null;
 
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k !== null) {
-        memCache.set(k, rawGet.call(localStorage, k));
-      }
+      if (k !== null) memCache.set(k, rawGet.call(localStorage, k));
     }
 
     const flushNow = () => {
-      if (flushTimer) {
-        clearTimeout(flushTimer);
-        flushTimer = null;
-      }
-      pendingWrites.forEach((val, key) => {
+      if (flushTimer) clearTimeout(flushTimer);
+      flushTimer = null;
+      pendingWrites.forEach((v, k) => {
         try {
-          if (val === null) rawRemove.call(localStorage, key);
-          else rawSet.call(localStorage, key, val);
+          if (v === null) rawRemove.call(localStorage, k);
+          else rawSet.call(localStorage, k, v);
         } catch (e) {}
       });
       pendingWrites.clear();
@@ -37,47 +76,44 @@
     const scheduleFlush = () => {
       if (flushTimer) return;
       flushTimer = setTimeout(() => {
-        if ('requestIdleCallback' in window) {
-          requestIdleCallback(flushNow, { timeout: 1000 });
-        } else {
-          flushNow();
-        }
-      }, 600);
+        if ('requestIdleCallback' in window) requestIdleCallback(flushNow);
+        else flushNow();
+      }, 500);
     };
 
-    Storage.prototype.getItem = function (key) {
+    Storage.prototype.getItem = function (k) {
       if (this === localStorage) {
-        const k = String(key);
-        if (memCache.has(k)) return memCache.get(k);
-        const val = rawGet.call(localStorage, k);
-        memCache.set(k, val);
+        const key = String(k);
+        if (memCache.has(key)) return memCache.get(key);
+        const val = rawGet.call(localStorage, key);
+        memCache.set(key, val);
         return val;
       }
-      return rawGet.call(this, key);
+      return rawGet.call(this, k);
     };
 
-    Storage.prototype.setItem = function (key, value) {
+    Storage.prototype.setItem = function (k, v) {
       if (this === localStorage) {
-        const k = String(key);
-        const v = String(value);
-        if (memCache.get(k) === v) return;
-        memCache.set(k, v);
-        pendingWrites.set(k, v);
+        const key = String(k);
+        const val = String(v);
+        if (memCache.get(key) === val) return;
+        memCache.set(key, val);
+        pendingWrites.set(key, val);
         scheduleFlush();
         return;
       }
-      return rawSet.call(this, key, value);
+      return rawSet.call(this, k, v);
     };
 
-    Storage.prototype.removeItem = function (key) {
+    Storage.prototype.removeItem = function (k) {
       if (this === localStorage) {
-        const k = String(key);
-        memCache.delete(k);
-        pendingWrites.set(k, null);
+        const key = String(k);
+        memCache.delete(key);
+        pendingWrites.set(key, null);
         scheduleFlush();
         return;
       }
-      return rawRemove.call(this, key);
+      return rawRemove.call(this, k);
     };
 
     Storage.prototype.clear = function () {
@@ -92,97 +128,31 @@
       if (document.visibilityState === 'hidden') flushNow();
     });
     window.addEventListener('pagehide', flushNow);
-    window.addEventListener('beforeunload', flushNow);
   } catch (e) {}
 
-  // ========== 2. 渲染减负：限制高开销毛玻璃模糊与长列表触控加速 ==========
-  const style = document.createElement('style');
-  style.textContent = `
-    * { -webkit-tap-highlight-color: transparent; }
-    [class*="backdrop-blur"], [style*="backdrop-filter"] {
-      -webkit-backdrop-filter: blur(6px) !important;
-      backdrop-filter: blur(6px) !important;
-      transform: translateZ(0);
-    }
-    main, [class*="overflow-y-auto"], [class*="scroll"] {
-      -webkit-overflow-scrolling: touch;
-      overscroll-behavior-y: contain;
-    }
-    .float-swipe-indicator {
-      position: fixed;
-      top: 50%;
-      width: 28px;
-      height: 76px;
-      margin-top: -38px;
-      background: rgba(0, 0, 0, 0.45);
-      color: #fff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 20px;
-      z-index: 999999;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.15s ease;
-    }
-    #float-swipe-left {
-      left: 0;
-      border-radius: 0 18px 18px 0;
-      transform: translateX(-100%);
-    }
-    #float-swipe-right {
-      right: 0;
-      border-radius: 18px 0 0 18px;
-      transform: translateX(100%);
-    }
-    #float-xhs-toast {
-      position: fixed;
-      top: 18px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(255, 36, 66, 0.94);
-      color: #fff;
-      padding: 8px 16px;
-      border-radius: 999px;
-      font-size: 13px;
-      font-weight: 500;
-      z-index: 999999;
-      box-shadow: 0 4px 14px rgba(0,0,0,0.2);
-      pointer-events: none;
-      transition: opacity 0.25s ease;
-      opacity: 0;
-    }
-  `;
-  document.head.appendChild(style);
+  // ========== 3. 核心：拦截 vivo 系统级返回手势（防直接退出桌面） ==========
+  const toast = document.createElement('div');
+  toast.id = 'float-toast';
+  document.addEventListener('DOMContentLoaded', () => document.body.appendChild(toast));
+  if (document.body) document.body.appendChild(toast);
 
-  // ========== 3. 全局屏幕左右双侧边缘滑动返回手势 ==========
-  const leftInd = document.createElement('div');
-  leftInd.id = 'float-swipe-left';
-  leftInd.className = 'float-swipe-indicator';
-  leftInd.textContent = '‹';
-
-  const rightInd = document.createElement('div');
-  rightInd.id = 'float-swipe-right';
-  rightInd.className = 'float-swipe-indicator';
-  rightInd.textContent = '›';
-
-  const appendIndicators = () => {
-    if (document.body) {
-      if (!document.getElementById('float-swipe-left')) document.body.appendChild(leftInd);
-      if (!document.getElementById('float-swipe-right')) document.body.appendChild(rightInd);
-    }
+  const showToast = (msg, duration = 2000) => {
+    toast.textContent = msg;
+    toast.style.opacity = '1';
+    setTimeout(() => {
+      toast.style.opacity = '0';
+    }, duration);
   };
-  document.addEventListener('DOMContentLoaded', appendIndicators);
-  appendIndicators();
 
-  const triggerSmartBack = () => {
+  const findInAppBackButton = () => {
     const candidates = Array.from(
       document.querySelectorAll('button, a, [role="button"], div[class*="cursor-pointer"]')
     );
     for (const el of candidates) {
       const rect = el.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) continue;
-      if (rect.top >= 0 && rect.top <= 120 && rect.left >= 0 && rect.left <= 110 && rect.width <= 90) {
+      // 位于屏幕顶部或左上角的返回控件
+      if (rect.top >= 0 && rect.top <= 140 && rect.left >= 0 && rect.left <= 130) {
         const text = (el.textContent || '').trim();
         const aria = (el.getAttribute('aria-label') || el.getAttribute('title') || '').toLowerCase();
         const html = el.innerHTML.toLowerCase();
@@ -194,106 +164,65 @@
           aria.includes('back') ||
           aria.includes('返回') ||
           html.includes('chevron-left') ||
-          html.includes('arrow-left')
+          html.includes('arrow-left') ||
+          html.includes('lucide-arrow')
         ) {
-          el.click();
-          return;
+          return el;
         }
       }
     }
-    if (window.history.length > 1) {
-      window.history.back();
-    }
+    return null;
   };
 
-  let startX = 0;
-  let startY = 0;
-  let edgeType = null; // 'left' | 'right' | null
+  // 维护一个页面深度栈，拦截 vivo 侧滑返回
+  let lastBackPressTime = 0;
+  const pushGuardState = () => {
+    try {
+      window.history.pushState({ floatSubPage: true }, '');
+    } catch (e) {}
+  };
 
-  window.addEventListener(
-    'touchstart',
+  // 监听用户点击进入任意子功能时自动挂载防退手势网
+  document.addEventListener(
+    'click',
     (e) => {
-      if (e.touches.length !== 1) return;
-      const touch = e.touches[0];
-      const w = window.innerWidth;
-      if (touch.clientX <= 28) {
-        startX = touch.clientX;
-        startY = touch.clientY;
-        edgeType = 'left';
-      } else if (touch.clientX >= w - 28) {
-        startX = touch.clientX;
-        startY = touch.clientY;
-        edgeType = 'right';
+      setTimeout(() => {
+        const btn = findInAppBackButton();
+        if (btn) {
+          pushGuardState();
+        }
+      }, 350);
+    },
+    true
+  );
+
+  // 核心拦截点：当 vivo 系统侧滑返回触发浏览器的 popstate 时
+  window.addEventListener('popstate', (e) => {
+    const backBtn = findInAppBackButton();
+    if (backBtn) {
+      // 找到了小手机内部的返回按钮，模拟点击返回上一层
+      backBtn.click();
+      // 如果还在子页面内，继续压入一层防护网
+      setTimeout(() => {
+        if (findInAppBackButton()) pushGuardState();
+      }, 300);
+    } else {
+      // 已经在小手机桌面了，提示双击退出，防止手滑退到手机系统桌面
+      const now = Date.now();
+      if (now - lastBackPressTime < 1800) {
+        // 允许退出
       } else {
-        edgeType = null;
+        lastBackPressTime = now;
+        pushGuardState();
+        showToast('已在桌面，再次侧滑退出小手机');
       }
-    },
-    { passive: true }
-  );
+    }
+  });
 
-  window.addEventListener(
-    'touchmove',
-    (e) => {
-      if (!edgeType || e.touches.length !== 1) return;
-      const touch = e.touches[0];
-      const dx = Math.abs(touch.clientX - startX);
-      const dy = Math.abs(touch.clientY - startY);
-      if (dy > 45) {
-        edgeType = null;
-        leftInd.style.opacity = '0';
-        rightInd.style.opacity = '0';
-        return;
-      }
-      if (dx > 12) {
-        const progress = Math.min(dx / 65, 1);
-        if (edgeType === 'left') {
-          leftInd.style.opacity = String(progress);
-          leftInd.style.transform = `translateX(${(progress - 1) * 100}%)`;
-        } else if (edgeType === 'right') {
-          rightInd.style.opacity = String(progress);
-          rightInd.style.transform = `translateX(${(1 - progress) * 100}%)`;
-        }
-      }
-    },
-    { passive: true }
-  );
+  // 初始进入也铺设一次手势防线
+  setTimeout(pushGuardState, 1000);
 
-  window.addEventListener(
-    'touchend',
-    (e) => {
-      if (!edgeType) return;
-      const currentEdge = edgeType;
-      edgeType = null;
-      leftInd.style.opacity = '0';
-      rightInd.style.opacity = '0';
-      leftInd.style.transform = 'translateX(-100%)';
-      rightInd.style.transform = 'translateX(100%)';
-
-      const touch = e.changedTouches[0];
-      if (!touch) return;
-      const dx = Math.abs(touch.clientX - startX);
-      const dy = Math.abs(touch.clientY - startY);
-      if (dx >= 60 && dy < 45) {
-        triggerSmartBack();
-      }
-    },
-    { passive: true }
-  );
-
-  // ========== 4. 小红书链接粘贴自动解析 ==========
-  const toast = document.createElement('div');
-  toast.id = 'float-xhs-toast';
-  if (document.body) document.body.appendChild(toast);
-  else document.addEventListener('DOMContentLoaded', () => document.body.appendChild(toast));
-
-  const showToast = (msg, duration = 2600) => {
-    toast.textContent = msg;
-    toast.style.opacity = '1';
-    setTimeout(() => {
-      toast.style.opacity = '0';
-    }, duration);
-  };
-
+  // ========== 4. 小红书链接自动解析 ==========
   const setReactInputValue = (el, newVal) => {
     const proto =
       el instanceof HTMLTextAreaElement
@@ -334,10 +263,10 @@
           setReactInputValue(target, current + parsedBlock);
           showToast('小红书笔记解析成功！');
         } else {
-          showToast('小红书链接已粘贴（未提取到公开摘要）');
+          showToast('已粘贴链接（未提取到公开文本）');
         }
       } catch (err) {
-        showToast('小红书解析请求失败');
+        showToast('小红书解析服务异常');
       }
     },
     true
