@@ -48,9 +48,10 @@ function migrateLegacyKey(lsKey: string): void {
     if (raw === null) return;
     if (_cache.get(lsKey) !== raw) {
         _cache.set(lsKey, raw);
-        trackIdentityWrite(kvDb.entries.put({ key: lsKey, value: raw })).catch(() => {});
+        // A failed late migration must retain the only durable legacy copy.
+        trackIdentityWrite(kvDb.entries.put({ key: lsKey, value: raw }))
+            .then(() => removeLegacyLocalStorageKeyIfValue(lsKey, raw)).catch(() => {});
     }
-    localStorage.removeItem(lsKey);
 }
 
 function migrateLegacyPrefix(prefix: string): void {
