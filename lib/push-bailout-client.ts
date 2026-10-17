@@ -1,4 +1,4 @@
-import { workspaceKvKey } from "./identity-workspace";
+import { workspaceKvKey, getWorkspaceIdentityId } from "./identity-workspace";
 // 离线推送·兜底预约（客户端侧）：
 // 追问排期时把「组装好的完整请求快照」预约到服务端；本地正常触发就撤销，
 // App 被杀则由服务端 cron 到点接管生成并推送。组装用的就是前台同一条
@@ -82,7 +82,7 @@ function resolveNotifyAvatar(sessionId: string | undefined): string | undefined 
 /** 组装 notify 字段：标题 + 站内地址，能取到头像就一并带上。 */
 function notifyField(title: string, sessionId: string | undefined): Record<string, unknown> {
     const avatar = resolveNotifyAvatar(sessionId);
-    return { title, url: "/", ...(avatar ? { avatar } : {}) };
+    return { title, url: "/", identityId: getWorkspaceIdentityId() ?? undefined, ...(avatar ? { avatar } : {}) };
 }
 
 function readCallInviteArmedMap(): Record<string, number> {

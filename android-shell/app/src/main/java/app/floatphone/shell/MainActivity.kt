@@ -410,7 +410,7 @@ class MainActivity : AppCompatActivity() {
                 val previous = list.getItemAtIndex(list.currentIndex - 1)?.url
                 val current = Uri.parse(SITE_URL)
                 val target = previous?.let { Uri.parse(it) }
-                if (target?.scheme == current.scheme && target.host == current.host && target.port == current.port) webView.goBack()
+                if (target != null && target.scheme == current.scheme && target.host == current.host && target.port == current.port) webView.goBack()
             }
         }
     }
@@ -723,7 +723,11 @@ class MainActivity : AppCompatActivity() {
         fun openSystemSettings(which: String): Boolean = deviceAction.openSystemSettings(which)
 
         @JavascriptInterface
-        fun notify(title: String, body: String, avatarUrl: String, sessionId: String?): Boolean = runCatching {
+        fun notify(title: String, body: String, avatarUrl: String, sessionId: String?): Boolean =
+            notifyForIdentity(title, body, avatarUrl, sessionId, "")
+
+        @JavascriptInterface
+        fun notifyForIdentity(title: String, body: String, avatarUrl: String, sessionId: String?, identityId: String): Boolean = runCatching {
             ensureMessageChannel()
             val manager = getSystemService(NotificationManager::class.java)
             val icon = loadAvatarBitmap(avatarUrl)
@@ -747,6 +751,9 @@ class MainActivity : AppCompatActivity() {
                 val replyIntent = Intent(this@MainActivity, NotificationReplyReceiver::class.java).apply {
                     action = NotificationReplyReceiver.ACTION_REPLY
                     putExtra(NotificationReplyReceiver.EXTRA_SESSION_ID, sid)
+                    putExtra(NotificationReplyReceiver.EXTRA_IDENTITY_ID, identityId)
+                    // Intent data, unlike extras, participates in PendingIntent identity.
+                    data = Uri.parse("floatshell://reply/${Uri.encode(identityId)}/${Uri.encode(sid)}")
                 }
                 val replyPending = PendingIntent.getBroadcast(
                     this@MainActivity,

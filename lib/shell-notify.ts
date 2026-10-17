@@ -1,3 +1,4 @@
+import { getWorkspaceIdentityId, isIdentityWorkspaceSwitching } from "./identity-workspace";
 import { loadChatAppSettings, saveChatAppSettings } from "./chat-storage";
 
 // lib/shell-notify.ts
@@ -50,6 +51,7 @@ type ShellNotificationBridge = {
      * 第 4 个参数（会话 id）是后加的，用于让通知点击直达对应聊天：
      * 旧壳只认前三个参数，多传会被忽略，不会报错——新老壳都安全。
      */
+    notifyForIdentity?: (title: string, body: string, avatarUrl: string, sessionId: string, identityId: string) => boolean;
     notify?: (title: string, body: string, avatarUrl: string, sessionId?: string) => boolean;
 };
 
@@ -106,12 +108,15 @@ export function sendShellNotification(
     sessionId?: string | null,
 ): boolean {
     const bridge = getBridge();
-    if (!bridge || !isShellNotificationEnabled()) return false;
+    if (!bridge || !isShellNotificationEnabled() || isIdentityWorkspaceSwitching()) return false;
     const noticeKey = `${sessionId || ""}\u0000${title}\u0000${body}`;
     const now = Date.now();
     if (noticeKey === lastNoticeKey && now - lastNoticeAt < NOTICE_DEDUPE_WINDOW_MS) return true;
     try {
-        const sent = bridge.notify?.(title || "小手机", body || "", normalizeAvatar(avatar), sessionId || "") === true;
+        const identityId = getWorkspaceIdentityId();
+        const sent = (identityId && bridge.notifyForIdentity
+            ? bridge.notifyForIdentity(title || "小手机", body || "", normalizeAvatar(avatar), sessionId || "", identityId)
+            : bridge.notify?.(title || "小手机", body || "", normalizeAvatar(avatar), sessionId || "")) === true;
         if (sent) { lastNoticeKey = noticeKey; lastNoticeAt = now; }
         return sent;
     } catch {

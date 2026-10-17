@@ -9,9 +9,10 @@ function load(file, require, globals = {}) {
  return exports;
 }
 (async () => {
- let settings = {}, accepted = false, count = 0, opened = 0;
+ let settings = {}, accepted = false, count = 0, opened = 0, identityId = null, switching = false;
  const bridge = {notify(...args){ count++; assert.equal(args.length,4); return accepted; },openAppSettings(){opened++;}};
  const shell = load('lib/shell-notify.ts', name => {
+  if(name==='./identity-workspace')return {getWorkspaceIdentityId:()=>identityId,isIdentityWorkspaceSwitching:()=>switching};
   assert.equal(name,'./chat-storage');
   return {loadChatAppSettings:()=>settings,saveChatAppSettings:value=>settings=value};
  },{window:{AndroidShell:bridge}});
@@ -25,6 +26,11 @@ function load(file, require, globals = {}) {
  assert.equal(shell.testShellNotification().ok,false);
  shell.setShellNotificationEnabled(true);assert.equal(shell.testShellNotification().ok,true);
  assert.equal(shell.openShellNotificationSettings(),true);assert.equal(opened,1);
+ identityId='persona-A';let tagged=null;bridge.notifyForIdentity=(...args)=>{tagged=args;return true;};
+ assert.equal(shell.sendShellNotification('tag','message',null,'same-session'),true);
+ assert.equal(tagged[4],'persona-A');switching=true;tagged=null;
+ assert.equal(shell.sendShellNotification('stop','message',null,'same-session'),false);assert.equal(tagged,null);
+ switching=false;identityId=null;
  const notices=load('lib/chat-notification-events.ts',()=>{throw Error('unexpected dependency')});
  assert.equal(notices.shouldSuppressChatNotice(false,true,false),true);
  assert.equal(notices.shouldSuppressChatNotice(false,true,true),false);

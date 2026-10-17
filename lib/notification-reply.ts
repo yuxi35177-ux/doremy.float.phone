@@ -10,7 +10,7 @@
 // 消息落库）整个跑在 WebView 的 JS 里，原生没有那套逻辑。原生只负责
 // 「别把用户打的字弄丢」——这是它唯一能可靠承担的职责。
 
-import { IDENTITY_DEFERRED_REPLIES_KEY, isIdentityWorkspaceSwitching } from "./identity-workspace";
+import { IDENTITY_DEFERRED_REPLIES_KEY, isIdentityWorkspaceSwitching, getIdentityWorkspace } from "./identity-workspace";
 import { kvGet, kvSetAsync } from "./kv-db";
 import { loadChatSessions, pushChatMessage, hydrateChatStorage } from "./chat-storage";
 import { requestBackgroundChatReply } from "./follow-up-service";
@@ -35,6 +35,7 @@ export function hasNotificationReplyBridge(): boolean {
 export type PendingNotificationReply = {
     id: string;
     sessionId: string;
+    identityId?: string;
     text: string;
     /** 用户按下发送的时刻（原生记的墙钟），仅用于排查 */
     at: number;
@@ -80,13 +81,19 @@ async function flushRepliesForCurrentWorkspace(): Promise<number> {
     if (pending.length === 0) return 0;
 
     const sessionIds = new Set(loadChatSessions().map(s => s.id));
-    const otherWorkspaces = pending.filter(item => !sessionIds.has(item.sessionId));
+    const workspace = getIdentityWorkspace();
+    const belongsHere = (item: PendingNotificationReply) => sessionIds.has(item.sessionId) && (
+        item.identityId ? item.identityId === workspace?.activeId
+            : !workspace
+    );
+    // Untagged pre-upgrade/cloud replies cannot safely select a new persona.
+    const otherWorkspaces = pending.filter(item => !belongsHere(item));
     // Native queues are consumed globally. Keep replies for another persona until it is active.
     await kvSetAsync(IDENTITY_DEFERRED_REPLIES_KEY, JSON.stringify(otherWorkspaces));
     let sent = 0;
     const touched = new Set<string>();
     for (const item of pending) {
-        if (!sessionIds.has(item.sessionId)) continue;
+        if (!belongsHere(item)) continue;
         const text = item.text.trim();
         if (!text) continue;
         pushChatMessage({ sessionId: item.sessionId, role: "user", content: text });

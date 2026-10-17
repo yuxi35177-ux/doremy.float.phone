@@ -143,11 +143,12 @@ async function close(t){for(const db of t.load('lib/identity-workspace.ts').getI
  assert.equal(retryKv.isKvHydrated(),true);assert.equal(storage.getItem('startup-legacy-copy'),null);
  assert.equal((await retryDb.entries.get('startup-legacy-copy')).value,'startup durable copy');await close(retryTab);
  // A reply to an old persona's Android notification must wait for that persona.
+ let replyWorkspace=null;
  const replyValues=new Map();let native=[{id:'r-A',sessionId:'session-A',text:'private reply A',at:1}];let currentSessions=[{id:'session-B'}];const delivered=[];
  const replyExports={};const replyCode=ts.transpileModule(fs.readFileSync('lib/notification-reply.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
  const replyWindow={AndroidShell:{consumePendingReplies(){const items=native;native=[];return JSON.stringify(items);}}};
  vm.runInNewContext(replyCode,{exports:replyExports,console,window:replyWindow,require:name=>({
-  './identity-workspace':{IDENTITY_DEFERRED_REPLIES_KEY:'deferred',isIdentityWorkspaceSwitching:()=>false},
+  './identity-workspace':{IDENTITY_DEFERRED_REPLIES_KEY:'deferred',isIdentityWorkspaceSwitching:()=>false,getIdentityWorkspace:()=>replyWorkspace},
   './kv-db':{kvGet:key=>replyValues.get(key)??null,kvSetAsync:async(key,value)=>replyValues.set(key,value)},
   './chat-storage':{hydrateChatStorage:async()=>{},loadChatSessions:()=>currentSessions,pushChatMessage:message=>delivered.push(message)},
   './follow-up-service':{requestBackgroundChatReply:async()=>{}},'./shell-call-overlay':{},
@@ -156,5 +157,14 @@ async function close(t){for(const db of t.load('lib/identity-workspace.ts').getI
  currentSessions=[{id:'session-A'}];assert.equal(await replyExports.flushPendingNotificationReplies(),1);
  assert.equal(delivered[0].sessionId,'session-A');assert.equal(delivered[0].content,'private reply A');
  assert.equal(await replyExports.flushPendingNotificationReplies(),0);
+ // The same session ID in B must not consume a reply tagged for A, or an old untagged reply.
+ currentSessions=[{id:'same-session'}];replyWorkspace={activeId:'persona-B',legacyOwnerId:'persona-A'};
+ native=[{id:'tag-A',sessionId:'same-session',identityId:'persona-A',text:'tagged A',at:2},
+ {id:'old-cloud',sessionId:'same-session',text:'untagged legacy',at:3},
+ {id:'tag-B',sessionId:'same-session',identityId:'persona-B',text:'tagged B',at:4}];
+ assert.equal(await replyExports.flushPendingNotificationReplies(),1);assert.equal(delivered.at(-1).content,'tagged B');
+ replyWorkspace.activeId='persona-A';assert.equal(await replyExports.flushPendingNotificationReplies(),1);
+ assert.equal(delivered.at(-1).content,'tagged A');
+ assert.ok(JSON.parse(replyValues.get('deferred')).some(item=>item.id==='old-cloud'));
  console.log('PASS identity workspaces: old archive retained; A→B→A; chats/memory/KV isolated; shared resources; pinned background scope; backup/clear boundaries; missing mirror recovery; corrupt routing fails closed.');
 })().catch(error=>{console.error(error);process.exitCode=1});
