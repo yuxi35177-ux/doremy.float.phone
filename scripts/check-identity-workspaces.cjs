@@ -132,6 +132,16 @@ async function close(t){for(const db of t.load('lib/identity-workspace.ts').getI
  migrationKv.registerKvMigration('late-legacy-copy');
  await assert.rejects(migrationKv.flushIdentityKvWrites());
  assert.equal(storage.getItem('late-legacy-copy'),'only durable copy');await close(failedMigration);
+ // Retrying failed startup hydration must persist data even when its cache is warm.
+ const retryTab=tab();const retryKv=retryTab.load('lib/kv-db.ts');
+ storage.setItem('startup-legacy-copy','startup durable copy');retryKv.registerKvMigration('startup-legacy-copy');
+ const retryDb=retryTab.load('lib/identity-workspace.ts').getIdentityDatabases().find(db=>db.name==='AiPhoneKvDB');
+ const failCreate=()=>{throw new DOMException('startup quota test','QuotaExceededError');};
+ retryDb.entries.hook('creating',failCreate);await retryKv.hydrateKvDb();
+ assert.equal(retryKv.isKvHydrated(),false);assert.equal(storage.getItem('startup-legacy-copy'),'startup durable copy');
+ retryDb.entries.hook('creating').unsubscribe(failCreate);await retryKv.hydrateKvDb();
+ assert.equal(retryKv.isKvHydrated(),true);assert.equal(storage.getItem('startup-legacy-copy'),null);
+ assert.equal((await retryDb.entries.get('startup-legacy-copy')).value,'startup durable copy');await close(retryTab);
  // A reply to an old persona's Android notification must wait for that persona.
  const replyValues=new Map();let native=[{id:'r-A',sessionId:'session-A',text:'private reply A',at:1}];let currentSessions=[{id:'session-B'}];const delivered=[];
  const replyExports={};const replyCode=ts.transpileModule(fs.readFileSync('lib/notification-reply.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;

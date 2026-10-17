@@ -140,10 +140,10 @@ export function hydrateKvDb(): Promise<void> {
             const lsKey = workspaceKvKey(logicalKey);
             const raw = localStorage.getItem(lsKey);
             if (raw === null) continue;
-            if (_cache.get(lsKey) !== raw) {
-                batch.push({ key: lsKey, value: raw });
-                _cache.set(lsKey, raw);
-            }
+            // A previous failed hydration may already have populated _cache.
+            // Cache equality cannot prove the legacy value reached durable IDB.
+            batch.push({ key: lsKey, value: raw });
+            _cache.set(lsKey, raw);
             removeKeys.add(lsKey);
         }
 
@@ -155,10 +155,8 @@ export function hydrateKvDb(): Promise<void> {
             if (logical === null || !matchesDynamicPrefix(logical)) continue;
             const raw = localStorage.getItem(k);
             if (raw !== null) {
-                if (_cache.get(k) !== raw) {
-                    batch.push({ key: k, value: raw });
-                    _cache.set(k, raw);
-                }
+                batch.push({ key: k, value: raw });
+                _cache.set(k, raw);
                 removeKeys.add(k);
             }
         }
