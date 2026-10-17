@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { Component, memo, useCallback, useEffect, useInsertionEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ErrorInfo, type ReactNode } from "react";
 
 import { updateStatusBarTone } from "@/lib/bg-tone";
@@ -25,11 +26,11 @@ import { RealityBridgeApp } from "@/components/reality-bridge-app";
 import { REALITY_BRIDGE_APP_EVENT_NAME, REALITY_BRIDGE_DATA_EVENT } from "@/lib/reality-bridge/types";
 import { DiaryApp } from "@/components/diary/diary-app";
 import { XiaohongshuApp } from "@/components/xiaohongshu/xiaohongshu-app";
-import { StoryApp } from "@/components/story/story-app";
-import { VnApp } from "@/components/vn/vn-app";
-import ReadingApp from "@/components/reading/reading-app";
-import MapApp from "@/components/map/map-app";
-import { DwellingApp } from "@/components/dwelling/dwelling-app";
+
+
+
+
+
 import { MascotFloat } from "@/components/mascot/mascot-float";
 import { PerceptionBootstrap } from "@/components/perception/perception-bootstrap";
 import { MascotPreviewHost } from "@/components/mascot/mascot-preview-host";
@@ -37,7 +38,7 @@ import { useMusicControlsOptional } from "@/lib/music-context";
 import { PhoneResourcesApp, type ResourceSubPage } from "@/components/phone-resources-app";
 import { CheckPhoneApp } from "@/components/checkphone/checkphone-app";
 import { ShoppingApp } from "@/components/shopping/shopping-app";
-import { GameHubApp } from "@/components/game/game-hub-app";
+
 import { MixologyApp } from "@/components/mixology/mixology-app";
 import InterviewMagazineApp from "@/components/interview/interview-magazine-app";
 import { CoCreateApp } from "@/components/cocreate/cocreate-app";
@@ -147,6 +148,17 @@ import { canSendShellNotification, sendShellNotification } from "@/lib/shell-not
 import type { ChatSharePayload } from "@/lib/chat-share";
 import { completePendingMcpOAuthCallback } from "@/lib/tool-executor";
 import { LayoutGrid, LoaderCircle, RefreshCw } from "lucide-react";
+
+function AppLoading() {
+  return <div className="page-shell" role="status" style={{ display: "grid", placeItems: "center", height: "100%" }}>正在打开…</div>;
+}
+
+const StoryApp = dynamic(() => import("@/components/story/story-app").then(module => module.StoryApp), { ssr: false, loading: AppLoading });
+const VnApp = dynamic(() => import("@/components/vn/vn-app").then(module => module.VnApp), { ssr: false, loading: AppLoading });
+const ReadingApp = dynamic(() => import("@/components/reading/reading-app"), { ssr: false, loading: AppLoading });
+const MapApp = dynamic(() => import("@/components/map/map-app"), { ssr: false, loading: AppLoading });
+const DwellingApp = dynamic(() => import("@/components/dwelling/dwelling-app").then(module => module.DwellingApp), { ssr: false, loading: AppLoading });
+const GameHubApp = dynamic(() => import("@/components/game/game-hub-app").then(module => module.GameHubApp), { ssr: false, loading: AppLoading });
 
 const EMOJI_FONTS = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla"';
 
@@ -3844,8 +3856,32 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
 
   // Live finger offset while dragging — a transient CSS var so moving doesn't
   // re-render. Releasing sets it back to 0 and the CSS transition settles the page.
+  const swipePaintFrameRef = useRef(0);
+  const swipePendingOffsetRef = useRef(0);
+  const swipePageWidthRef = useRef(390);
+  const swipeGlassTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const setSwipeDrag = useCallback((px: number) => {
-    swipeLayerRef.current?.style.setProperty("--swipe-drag", `${px}px`);
+    swipePendingOffsetRef.current = px;
+    if (swipePaintFrameRef.current) return;
+    swipePaintFrameRef.current = requestAnimationFrame(() => {
+      swipePaintFrameRef.current = 0;
+      swipeLayerRef.current?.style.setProperty("--swipe-drag", `${swipePendingOffsetRef.current}px`);
+    });
+  }, []);
+  const resetSwipeDrag = useCallback(() => {
+    cancelAnimationFrame(swipePaintFrameRef.current);
+    swipePaintFrameRef.current = 0;
+    swipePendingOffsetRef.current = 0;
+    swipeLayerRef.current?.style.setProperty("--swipe-drag", "0px");
+    if (swipeGlassTimerRef.current) clearTimeout(swipeGlassTimerRef.current);
+    swipeGlassTimerRef.current = setTimeout(() => {
+      shellRef.current?.removeAttribute("data-desktop-swiping");
+      swipeGlassTimerRef.current = null;
+    }, 320);
+  }, []);
+  useEffect(() => () => {
+    cancelAnimationFrame(swipePaintFrameRef.current);
+    if (swipeGlassTimerRef.current) clearTimeout(swipeGlassTimerRef.current);
   }, []);
 
   const handleSwipeStart = useCallback((e: React.PointerEvent) => {
@@ -3856,6 +3892,8 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
       editTapRef.current = { pointerId: e.pointerId, x: e.clientX, y: e.clientY };
     }
     // Start swipe tracking (works in both normal and edit mode)
+    swipePageWidthRef.current = getSwipePageWidth();
+    if (swipeGlassTimerRef.current) clearTimeout(swipeGlassTimerRef.current);
     const s = swipeRef.current;
     s.startX = e.clientX;
     s.startY = e.clientY;
@@ -3864,7 +3902,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
     s.pointerId = e.pointerId;
     // Suppress the settle transition for 1:1 finger tracking while dragging.
     swipeLayerRef.current?.classList.add("phone-swipe-dragging");
-  }, [activeApp, editMode]);
+  }, [activeApp, editMode, getSwipePageWidth]);
 
   // ── 状态栏颜色自适应：检测当前背景亮度 ──
   useEffect(() => {
@@ -3954,6 +3992,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
         s.locked = Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
         if (s.locked === "x") {
           (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+          shellRef.current?.setAttribute("data-desktop-swiping", "1");
         }
       } else {
         return;
@@ -3965,7 +4004,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
     // Compute the pixel position from the committed page + finger delta, with
     // rubber-banding past the first/last page, then express it as an offset from
     // the current page's base (= the --swipe-drag CSS var).
-    const pageWidth = getSwipePageWidth();
+    const pageWidth = swipePageWidthRef.current;
     const page = currentPageIndexRef.current;
     let translateX = -page * pageWidth + dx;
     const minTranslateX = -Math.max(0, pageCount - 1) * pageWidth;
@@ -3981,6 +4020,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
     cancelLongPress();
     // Pointer is up → never keep the transition suppressed, whatever branch we take.
     swipeLayerRef.current?.classList.remove("phone-swipe-dragging");
+    resetSwipeDrag();
 
     // ── Edit mode drag end ──
     const drag = editDragRef.current;
@@ -4010,21 +4050,20 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
 
     const dx = s.deltaX;
     s.deltaX = 0;
-    const pageWidth = getSwipePageWidth();
+    const pageWidth = swipePageWidthRef.current;
     const swipeThreshold = Math.max(SWIPE_MIN_THRESHOLD, pageWidth * SWIPE_THRESHOLD_RATIO);
 
     const page = currentPageIndexRef.current;
     let targetPageIndex = page;
-    if (Math.abs(dx) > swipeThreshold) {
+    if (e.type !== "pointercancel" && Math.abs(dx) > swipeThreshold) {
       targetPageIndex = Math.min(Math.max(0, pageCount - 1), Math.max(0, page + (dx < 0 ? 1 : -1)));
     }
 
     // Re-enable the transition, clear the finger offset, and commit the page.
     // currentPageIndex is the single source of truth → CSS settles to it, no race.
     swipeLayerRef.current?.classList.remove("phone-swipe-dragging");
-    setSwipeDrag(0);
     if (targetPageIndex !== page) setCurrentPageIndex(targetPageIndex);
-  }, [editMode, getSwipePageWidth, pageCount, setSwipeDrag]);
+  }, [editMode, pageCount, resetSwipeDrag]);
 
   const handleCloseXiaohongshu = useCallback((isBusy?: boolean) => {
     const shouldKeepMounted = isBusy ?? xiaohongshuBusy;

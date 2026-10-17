@@ -2,28 +2,13 @@
   if (window.__FLOAT_PERF_V2_LOADED__) return;
   window.__FLOAT_PERF_V2_LOADED__ = true;
 
-  // ========== 1. 终极性能暴力解脱：干掉安卓 WebView 的显卡杀手（实时模糊） ==========
+  // Shared toast styling; rendering optimizations live in the desktop components.
   const style = document.createElement('style');
   style.id = 'float-nuclear-perf';
   style.textContent = `
     * {
       -webkit-tap-highlight-color: transparent !important;
       outline: none !important;
-    }
-    /* 彻底关闭导致安卓掉帧卡顿的 backdrop-filter 实时显卡拷贝，换成丝滑高透背景 */
-    [class*="backdrop-blur"],
-    [style*="backdrop-filter"],
-    [class*="bg-white/"],
-    [class*="bg-black/"] {
-      -webkit-backdrop-filter: none !important;
-      backdrop-filter: none !important;
-    }
-    /* 强制所有可滚动列表启用 GPU 异步图层与原生惯性滑动 */
-    main, [class*="overflow-y-auto"], [class*="scroll"], ul, ol {
-      -webkit-overflow-scrolling: touch !important;
-      overscroll-behavior-y: contain !important;
-      touch-action: pan-y !important;
-      transform: translateZ(0);
     }
     /* 提示条样式 */
     #float-toast {

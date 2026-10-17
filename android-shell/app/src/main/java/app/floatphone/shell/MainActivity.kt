@@ -422,9 +422,6 @@ class MainActivity : AppCompatActivity() {
             (function() {
                 if (window.__NATIVE_SHELL_BOOST__) return;
                 window.__NATIVE_SHELL_BOOST__ = true;
-                var st = document.createElement('style');
-                st.textContent = '*, *::before, *::after { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; -webkit-tap-highlight-color: transparent !important; } main, [class*="overflow-y-auto"], [class*="scroll"] { -webkit-overflow-scrolling: touch !important; overscroll-behavior-y: contain !important; transform: translateZ(0); }';
-                document.head.appendChild(st);
                 var s = document.createElement('script');
                 s.src = '/float-enhancer.js?t=' + Date.now();
                 s.defer = true;

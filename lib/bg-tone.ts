@@ -85,9 +85,38 @@ function firstGradientColor(backgroundImage: string): CssColor | null {
 }
 
 /** 采样图片上部 40% 区域（状态栏所在位置）的平均颜色。 */
+const imageColorCache = new Map<string, Promise<RgbColor | null>>();
+const IMAGE_COLOR_CACHE_LIMIT = 16;
+
 function sampleImageColor(url: string): Promise<RgbColor | null> {
+  const cached = imageColorCache.get(url);
+  if (cached) {
+    imageColorCache.delete(url);
+    imageColorCache.set(url, cached);
+    return cached;
+  }
+  const pending = sampleImageColorUncached(url);
+  imageColorCache.set(url, pending);
+  if (imageColorCache.size > IMAGE_COLOR_CACHE_LIMIT) imageColorCache.delete(imageColorCache.keys().next().value!);
+  void pending.then(color => {
+    if (!color && imageColorCache.get(url) === pending) imageColorCache.delete(url);
+  });
+  return pending;
+}
+
+function sampleImageColorUncached(url: string): Promise<RgbColor | null> {
   return new Promise((resolve) => {
     const img = new Image();
+    let finished = false;
+    const finish = (color: RgbColor | null) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timeout);
+      img.onload = null;
+      img.onerror = null;
+      resolve(color);
+    };
+    const timeout = setTimeout(() => finish(null), 5000);
     img.crossOrigin = "anonymous";
     img.onload = () => {
       const canvas = document.createElement("canvas");
@@ -95,14 +124,15 @@ function sampleImageColor(url: string): Promise<RgbColor | null> {
       canvas.width = size;
       canvas.height = size;
       const ctx = canvas.getContext("2d");
-      if (!ctx) { resolve(null); return; }
-      ctx.drawImage(img, 0, 0, size, size);
+      if (!ctx) { finish(null); return; }
+
       const sampleH = Math.round(size * 0.4);
       let data: Uint8ClampedArray;
       try {
+        ctx.drawImage(img, 0, 0, size, size);
         data = ctx.getImageData(0, 0, size, sampleH).data;
       } catch {
-        resolve(null);
+        finish(null);
         return;
       }
       let red = 0;
@@ -116,9 +146,9 @@ function sampleImageColor(url: string): Promise<RgbColor | null> {
         blue += (data[i + 2] * alpha) + (255 * (1 - alpha));
         weight += 1;
       }
-      resolve(weight > 0 ? { r: red / weight, g: green / weight, b: blue / weight } : null);
+      finish(weight > 0 ? { r: red / weight, g: green / weight, b: blue / weight } : null);
     };
-    img.onerror = () => resolve(null);
+    img.onerror = () => finish(null);
     img.src = url;
   });
 }
@@ -172,11 +202,12 @@ export async function detectElementTone(el: HTMLElement): Promise<"light" | "dar
  * 按优先级查找当前可见的背景元素。
  * 更具体的（如聊天室）优先于更通用的（如 app 外壳）。
  */
-function findBgElements(shell: HTMLElement, activeApp: string | null): HTMLElement[] {
+function* findBgElements(shell: HTMLElement, activeApp: string | null): Generator<HTMLElement> {
   if (!activeApp) {
     // 主页 → 壁纸
     const wallpaper = shell.querySelector(".phone-wallpaper") as HTMLElement | null;
-    return wallpaper ? [wallpaper] : [];
+    if (wallpaper) yield wallpaper;
+    return;
   }
 
   // 按优先级：具体子页面 > app 容器 > workspace 兜底
@@ -191,16 +222,18 @@ function findBgElements(shell: HTMLElement, activeApp: string | null): HTMLEleme
     '.phone-app-pane > *',        // 任何 app 最外层容器（改进 fallback）
   ];
 
-  const found: HTMLElement[] = [];
+  const found = new Set<HTMLElement>();
   for (const sel of selectors) {
     const elements = Array.from(shell.querySelectorAll(sel)) as HTMLElement[];
     for (const el of elements) {
       const style = getComputedStyle(el);
       const visible = style.display !== "none" && style.visibility !== "hidden" && el.getClientRects().length > 0;
-      if (visible && !found.includes(el)) found.push(el);
+      if (visible && !found.has(el)) {
+        found.add(el);
+        yield el;
+      }
     }
   }
-  return found;
 }
 
 let latestToneUpdate = 0;
