@@ -25,8 +25,11 @@ KV writes and barriers queued Dexie writes, then commits the new routing and
 binding selection atomically. It reloads the page to drop old caches. The old
 page's storage scope and resolved identity remain pinned until unload. Other tabs
 reload on a routing change. A failed switch keeps the old archive and offers reload.
-Native notification replies for inactive sessions are deferred until that archive
-is opened rather than creating a session under another persona.
+Native notification replies carry an optional identity ID and are deferred until
+that identity and session are active. Untagged legacy/cloud replies are retained
+without auto-delivery once isolation is enabled: identical session IDs can occur
+after importing a backup into multiple personas. Cloud bailout identity propagation
+requires a separate manual function deployment; this branch does not deploy it.
 
 Backup exports, clears and built-in phone lookup tools use logical store names
 resolved into the active archive. Private KV keys from other personas are excluded.
