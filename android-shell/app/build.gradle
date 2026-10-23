@@ -15,10 +15,16 @@ android {
     // targetSdk 决定运行时的行为约定（如边到边布局），动它会影响已经调好的
     // WebView 全屏布局，那是另一件事，得单独验证，不该顺手带上。
     compileSdk 36
+    ndkVersion "27.2.12479018"
+    externalNativeBuild { cmake { path file("src/main/cpp/CMakeLists.txt"); version "3.22.1" } }
+    sourceSets { main { jniLibs.srcDirs = ["libnode/bin"] } }
+    packaging { jniLibs { useLegacyPackaging = true } }
 
     defaultConfig {
         applicationId "app.floatphone.doremy"
         minSdk 26
+        ndk { abiFilters "arm64-v8a" }
+        buildConfigField "boolean", "LOCAL_BUNDLE", "true"
         targetSdk 34
         // versionCode 必须严格递增，否则 Android 拒绝覆盖安装（表现为「应用未安装」）。
         // 1.0.7：回复条配色逐项自定义；1.0.8：浮窗自检与失败留痕。
@@ -26,8 +32,8 @@ android {
         // 1.0.10：浮窗改圆角矩形；浮窗左上角显示「待发 N」角标。
         // 1.0.11：截屏与主动查岗（含查岗浮层回复框）；通知栏「直接回复」。
         // 1.0.12：截屏可选收件人；位置感知；睡眠（Health Connect）。
-        versionCode 16
-        versionName "1.0.16"
+        versionCode 17
+        versionName "1.0.17-local"
         buildConfigField "String", "SITE_URL", groovy.json.JsonOutput.toJson(siteUrl)
     }
 

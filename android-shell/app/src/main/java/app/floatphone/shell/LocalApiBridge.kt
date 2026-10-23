@@ -19,7 +19,7 @@ import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 
 /** Origin-scoped, main-frame-only transport for phone-local AI endpoints. No cloud proxy. */
-class LocalApiBridge(private val webView: WebView, siteUrl: String) {
+class LocalApiBridge(private val webView: WebView, siteUrl: String, private val bundled: Boolean = false) {
     private val origin = Uri.parse(siteUrl).buildUpon().path(null).query(null).fragment(null).build().toString().trimEnd('/')
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -38,7 +38,7 @@ class LocalApiBridge(private val webView: WebView, siteUrl: String) {
 
     fun attach() {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return
-        WebViewCompat.addWebMessageListener(webView, "FloatLocalApi", setOf(origin)) { _, message, source, isMainFrame, reply ->
+        WebViewCompat.addWebMessageListener(webView, if (bundled) "FloatLocalHttp" else "FloatLocalApi", setOf(origin)) { _, message, source, isMainFrame, reply ->
             if (!isMainFrame || source.toString().trimEnd('/') != origin) return@addWebMessageListener
             val json = runCatching { JSONObject(message.data ?: "") }.getOrNull() ?: return@addWebMessageListener
             val id = json.optString("id")
@@ -60,31 +60,41 @@ class LocalApiBridge(private val webView: WebView, siteUrl: String) {
     private fun start(id: String, json: JSONObject, reply: JavaScriptReplyProxy) {
         if (transfers.containsKey(id)) return
         val request = runCatching {
-            require(transfers.size < 8)
+            require(transfers.size < if (bundled) 64 else 8)
             val uri = Uri.parse(json.getString("url"))
             require(uri.scheme == "http" || uri.scheme == "https")
             require(uri.userInfo == null && uri.fragment == null)
-            // No DNS for localhost: map it to a numeric loopback address.
-            require(uri.host?.lowercase() in setOf("localhost", "127.0.0.1", "::1", "[::1]"))
-            require(uri.port == -1 || uri.port in 1..65535)
-            val path = uri.path ?: ""
-            require(Regex("/(models|chat/completions|embeddings|messages)$").containsMatchIn(path) ||
-                Regex("/models/[^/]+:(streamGenerateContent|generateContent)$").containsMatchIn(path))
-            val target = if (uri.host == "localhost") uri.buildUpon().encodedAuthority(
-                "127.0.0.1" + if (uri.port > 0) ":${uri.port}" else ""
-            ).build().toString() else uri.toString()
+            val ownOrigin = uri.scheme + "://" + uri.authority
             val method = json.optString("method", "GET").uppercase()
-            require(method == "GET" || method == "POST")
-            val body = if (json.isNull("body")) "" else json.getString("body")
-            require(body.toByteArray(Charsets.UTF_8).size <= 16 * 1024 * 1024)
-            val builder = Request.Builder().url(target)
+            val rawBody = if (json.isNull("body")) "" else json.getString("body")
+            val bytes = if (bundled && json.optBoolean("bodyBase64")) Base64.decode(rawBody, Base64.DEFAULT)
+                else rawBody.toByteArray(Charsets.UTF_8)
+            require(bytes.size <= 64 * 1024 * 1024)
+            val target = if (bundled) {
+                require(ownOrigin == origin)
+                require(method in setOf("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"))
+                uri.toString()
+            } else {
+                require(uri.host?.lowercase() in setOf("localhost", "127.0.0.1", "::1", "[::1]"))
+                require(uri.port == -1 || uri.port in 1..65535)
+                val path = uri.path ?: ""
+                require(Regex("/(models|chat/completions|embeddings|messages)$").containsMatchIn(path) ||
+                    Regex("/models/[^/]+:(streamGenerateContent|generateContent)$").containsMatchIn(path))
+                require(method == "GET" || method == "POST")
+                if (uri.host == "localhost") uri.buildUpon().encodedAuthority(
+                    "127.0.0.1" + if (uri.port > 0) ":${uri.port}" else ""
+                ).build().toString() else uri.toString()
+            }
+            val builder = if (bundled) LocalRuntime.requestFor(uri) else Request.Builder().url(target)
             val headers = json.optJSONObject("headers") ?: JSONObject()
             headers.keys().forEach { name ->
-                if (name.lowercase() in setOf("authorization", "content-type", "x-api-key", "anthropic-version", "accept")) {
+                if ((bundled && name.lowercase() !in setOf("host", "connection", "content-length", "cookie", "accept-encoding", "x-phone-local-token")) || name.lowercase() in setOf("authorization", "content-type", "x-api-key", "anthropic-version", "accept")) {
                     builder.header(name, headers.getString(name))
                 }
             }
-            builder.method(method, if (method == "POST") body.toRequestBody("application/json".toMediaType()) else null).build()
+            if (bundled) android.webkit.CookieManager.getInstance().getCookie(origin)?.let { builder.header("Cookie", it) }
+            val contentType = headers.optString("content-type", "application/json").toMediaType()
+            builder.method(method, if (method !in setOf("GET", "HEAD")) bytes.toRequestBody(contentType) else null).build()
         }.getOrNull()
         if (request == null) {
             post(reply, JSONObject().put("id", id).put("type", "error"))
@@ -107,7 +117,11 @@ class LocalApiBridge(private val webView: WebView, siteUrl: String) {
             override fun onResponse(call: Call, response: Response) {
                 response.use {
                     try {
+                        if (bundled) response.headers("Set-Cookie").forEach { android.webkit.CookieManager.getInstance().setCookie(origin, it) }
                         deliver("headers") {
+                            it.put("headers", JSONObject(response.headers.toMultimap().filterKeys { name ->
+                                name.lowercase() !in setOf("set-cookie", "content-encoding", "content-length")
+                            }.mapValues { header -> header.value.joinToString(", ") }))
                             it.put("status", response.code)
                                 .put("contentType", response.header("Content-Type") ?: "application/json")
                         }

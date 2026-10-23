@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(phone_local)
+add_library(node SHARED IMPORTED)
+set_target_properties(node PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/../../../libnode/bin/${ANDROID_ABI}/libnode.so)
+add_library(phone-local SHARED runtime.cpp)
+target_include_directories(phone-local PRIVATE ../../../libnode/include/node)
+target_link_libraries(phone-local node log)

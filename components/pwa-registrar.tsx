@@ -4,6 +4,7 @@ import { useEffect } from "react";
 
 export function PWARegistrar() {
   useEffect(() => {
+    if (process.env.NEXT_PUBLIC_PHONE_LOCAL === "1") return;
     if (process.env.NODE_ENV !== "production") return;
     if (!("serviceWorker" in navigator)) return;
 

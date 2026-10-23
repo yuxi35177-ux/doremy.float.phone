@@ -52,6 +52,7 @@ import java.io.FileOutputStream
 
 class MainActivity : AppCompatActivity() {
     private var localApiBridge: LocalApiBridge? = null
+    private var localHttpBridge: LocalApiBridge? = null
 
     companion object {
         val SITE_URL: String = BuildConfig.SITE_URL
@@ -179,6 +180,7 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        LocalRuntime.start(this)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         enableDisplayCutoutCover()
         enableHighRefreshRate()
@@ -208,6 +210,7 @@ class MainActivity : AppCompatActivity() {
         ViewCompat.requestApplyInsets(rootContainer)
 
         webView.settings.apply {
+            textZoom = 100
             javaScriptEnabled = true
             domStorageEnabled = true
             databaseEnabled = true
@@ -220,14 +223,31 @@ class MainActivity : AppCompatActivity() {
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false)
 
         localApiBridge = LocalApiBridge(webView, SITE_URL).also { it.attach() }
+        localHttpBridge = LocalApiBridge(webView, SITE_URL, bundled = true).also { it.attach() }
+        check(androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            "请先更新 Android System WebView 后再运行本地安装包"
+        }
+        androidx.webkit.WebViewCompat.addDocumentStartJavaScript(webView,
+            assets.open("phone-local-transport.js").bufferedReader().use { it.readText() }, setOf(SITE_URL))
         webView.addJavascriptInterface(ShellBridge(), "AndroidShell")
         webView.addJavascriptInterface(PhoneWidgetBridge(), "PhoneWidget")
         PerceptionBridge.attachStepSensor(this)
         ShellBus.webView = webView
 
+        if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.SERVICE_WORKER_BASIC_USAGE)) {
+            androidx.webkit.ServiceWorkerControllerCompat.getInstance().setServiceWorkerClient(
+                object : androidx.webkit.ServiceWorkerClientCompat() {
+                    override fun shouldInterceptRequest(request: WebResourceRequest): android.webkit.WebResourceResponse? =
+                        LocalRuntime.intercept(request)
+                })
+        }
         webView.webViewClient = object : WebViewClient() {
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): android.webkit.WebResourceResponse? =
+                LocalRuntime.intercept(request)
+
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                 localApiBridge?.cancelAll()
+                localHttpBridge?.cancelAll()
                 super.onPageStarted(view, url, favicon)
             }
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {

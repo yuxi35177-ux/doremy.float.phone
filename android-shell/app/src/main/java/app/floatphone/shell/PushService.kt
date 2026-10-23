@@ -50,6 +50,7 @@ class PushService : Service() {
         private var running = false
 
         fun start(context: Context) {
+            LocalRuntime.start(context)
             if (running) return
             val intent = Intent(context, PushService::class.java)
             if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent)
@@ -58,6 +59,7 @@ class PushService : Service() {
     }
 
     private val client = OkHttpClient.Builder()
+        .addInterceptor { chain -> chain.proceed(LocalRuntime.route(chain.request())) }
         .pingInterval(25, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .build()

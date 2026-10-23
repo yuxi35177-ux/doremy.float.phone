@@ -36,3 +36,7 @@ tools/weixin-local-assistant/config.txt
 /android-shell/build/
 
 /android-shell/local.properties
+
+/.phone-server/
+/android-shell/app/src/main/assets/phone-server.zip
+/android-shell/app/libnode/

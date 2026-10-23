@@ -313,3 +313,14 @@
 .settings-main-menu .card-featured-desc {
   font-size: calc(9.5px * var(--app-text-scale, 1));
 }
+
+/* Keep two settings columns inside the phone, regardless of intrinsic text width. */
+.settings-main-menu { min-width: 0; width: 100%; }
+.settings-main-menu .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.settings-main-menu .card-card { min-width: 0; width: 100%; padding: 12px; aspect-ratio: auto; min-height: 112px; }
+.settings-main-menu .card-label,
+.settings-main-menu .card-featured-label { font-size: calc(12px * var(--app-text-scale, 1)); }
+.settings-main-menu .card-desc,
+.settings-main-menu .card-featured-desc { font-size: calc(10px * var(--app-text-scale, 1)); overflow-wrap: anywhere; white-space: normal; }
+.settings-main-menu .card-featured { min-width: 0; padding: 14px; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }

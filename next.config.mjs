@@ -22,6 +22,7 @@ function resolveDistDir() {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typedRoutes: true,
+  ...(process.env.PHONE_LOCAL_BUILD === "1" ? { output: "standalone", images: { unoptimized: true } } : {}),
   outputFileTracingRoot: projectRoot,
   distDir: resolveDistDir(),
   eslint: {
