@@ -849,10 +849,14 @@ class DeviceActionBridge(private val context: Context) {
         .put("dnd", true)
         .put("dndGranted", canSetDnd())
         .put("openApp", true)
-        // 闹钟/倒计时原来写死 true，不管手机有没有时钟都应「支持」——检测里那行
-        // 「App 已支持」因此是空的。现在真去查能不能拉起，查不到就如实报 false。
-        .put("alarm", canHandleAlarmIntent(AlarmClock.ACTION_SET_ALARM))
-        .put("timer", canHandleAlarmIntent(AlarmClock.ACTION_SET_TIMER))
+        // 壳已经实现 ACTION_SET_ALARM / ACTION_SET_TIMER，并声明了系统时钟要求的
+        // SET_ALARM 调用权限。部分 vivo 时钟不把这两个入口暴露给包可见性查询，
+        // 但仍能由 startActivity 正常拉起；因此能力状态按“本壳实现了动作”报告，
+        // 实际调用失败时再由 setAlarm/setTimer 返回系统的明确错误。
+        .put("alarm", true)
+        .put("timer", true)
+        .put("clockAlarmHandlerFound", canHandleAlarmIntent(AlarmClock.ACTION_SET_ALARM))
+        .put("clockTimerHandlerFound", canHandleAlarmIntent(AlarmClock.ACTION_SET_TIMER))
         .put("media", true)
         // 有没有「通知使用权」——有它才能读活跃媒体会话、确认播放指令是否生效。
         // 与 media=true 分开报：媒体控制本身随时能用（盲发按键），

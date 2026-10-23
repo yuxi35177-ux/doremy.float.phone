@@ -23,17 +23,17 @@ export function RealtimeExtras(){
  const permission=(key:string)=>key==="notificationCount"?"notifications":key;
  const supported=!!native()?.getRealtimeSnapshot;
  return <section className="per-card" style={{padding:16,marginTop:18}}>
-  <h3 style={{fontWeight:700,marginBottom:10}}>实时感知扩展 · 安卓</h3>
-  <p style={{fontSize:12,lineHeight:1.7,marginBottom:12}}>与上面的电量、网络、步数及使用统计共用设置，不重复添加。默认全部关闭。开启“随当前聊天提供”后，所选摘要会发给你配置的模型服务；不会因此额外调用模型。网页只能预览，需安装对应 APK。</p>
-  <div style={{display:"flex",justifyContent:"space-between",gap:12,padding:"12px 0"}}><span>启用扩展感知</span><Toggle checked={!!config.enabled} onChange={v=>update("enabled",v)}/></div>
+  <h3 style={{fontSize:"calc(15px * var(--app-text-scale, 1))",fontWeight:700,lineHeight:1.35,marginBottom:10}}>实时感知扩展 · 安卓</h3>
+  <p style={{fontSize:"calc(12px * var(--app-text-scale, 1))",lineHeight:1.6,marginBottom:12}}>与上面的电量、网络、步数及使用统计共用设置，不重复添加。默认全部关闭。开启“随当前聊天提供”后，所选摘要会发给你配置的模型服务；不会因此额外调用模型。网页只能预览，需安装对应 APK。</p>
+  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,padding:"12px 0",fontSize:"calc(13.5px * var(--app-text-scale, 1))"}}><span>启用扩展感知</span><Toggle checked={!!config.enabled} onChange={v=>update("enabled",v)}/></div>
   {rows.map(([id,label,desc])=><div key={id} style={{padding:"12px 0",borderTop:"1px solid var(--c-card-border)"}}>
-    <div role="group" aria-labelledby={`realtime-${id}`} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}><span id={`realtime-${id}`} style={{flex:1}}>{label}<small style={{display:"block",fontSize:12,color:"var(--c-text)",marginTop:4}}>{desc}</small></span><Toggle checked={!!config[id]} onChange={v=>update(id,v)}/></div>
-    <small>{supported?"安卓壳已接通":"当前版本不支持，需安装新 APK"}</small>
-    {supported&&config[id]&&["notifications","notificationCount","media","bluetooth","phone","nfc"].includes(id)&&<button type="button" className="ui-btn ui-btn-outline" style={{marginLeft:8,fontSize:12}} onClick={()=>native()?.requestRealtimePermission?.(permission(id))}>{grants[permission(id)]?"检查授权":"去授权"}</button>}
-    {id==="vibrate"&&supported&&config.vibrate&&<button type="button" className="ui-btn ui-btn-outline" style={{marginLeft:8}} onClick={()=>native()?.requestCharacterVibration?.()}>测试短震动</button>}
+    <div role="group" aria-labelledby={`realtime-${id}`} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,fontSize:"calc(13.5px * var(--app-text-scale, 1))"}}><span id={`realtime-${id}`} style={{flex:1}}>{label}<small style={{display:"block",fontSize:"calc(11px * var(--app-text-scale, 1))",lineHeight:1.5,color:"var(--c-text)",marginTop:4}}>{desc}</small></span><Toggle checked={!!config[id]} onChange={v=>update(id,v)}/></div>
+    <small style={{fontSize:"calc(10.5px * var(--app-text-scale, 1))",lineHeight:1.5}}>{supported?"安卓壳已接通":"当前版本不支持，需安装新 APK"}</small>
+    {supported&&config[id]&&["notifications","notificationCount","media","bluetooth","phone","nfc"].includes(id)&&<button type="button" className="ui-btn ui-btn-outline" style={{marginLeft:8,fontSize:"calc(11px * var(--app-text-scale, 1))"}} onClick={()=>native()?.requestRealtimePermission?.(permission(id))}>{grants[permission(id)]?"检查授权":"去授权"}</button>}
+    {id==="vibrate"&&supported&&config.vibrate&&<button type="button" className="ui-btn ui-btn-outline" style={{marginLeft:8,fontSize:"calc(11px * var(--app-text-scale, 1))"}} onClick={()=>native()?.requestCharacterVibration?.()}>测试短震动</button>}
   </div>)}
-  <div style={{display:"flex",justifyContent:"space-between",gap:12,padding:"12px 0"}}><span>随当前前台聊天提供所选摘要</span><Toggle checked={!!config.inject} onChange={v=>update("inject",v)}/></div>
-  <p style={{fontSize:12,lineHeight:1.7}}>快捷设置磁贴：在 vivo 控制中心的“编辑”里添加本应用。后台通知需在系统中允许通知、后台高耗电与自启动；系统是否保活以本机为准。NFC、步数、睡眠依赖硬件或系统服务，不会伪造数据。</p>
+  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,padding:"12px 0",fontSize:"calc(13.5px * var(--app-text-scale, 1))"}}><span>随当前前台聊天提供所选摘要</span><Toggle checked={!!config.inject} onChange={v=>update("inject",v)}/></div>
+  <p style={{fontSize:"calc(12px * var(--app-text-scale, 1))",lineHeight:1.6}}>快捷设置磁贴：在 vivo 控制中心的“编辑”里添加本应用。后台通知需在系统中允许通知、后台高耗电与自启动；系统是否保活以本机为准。NFC、步数、睡眠依赖硬件或系统服务，不会伪造数据。</p>
   <button type="button" className="ui-btn ui-btn-outline" onClick={()=>{native()?.clearRealtime?.();refresh()}}>清除临时现实记录</button>{" "}
   <button type="button" className="ui-btn ui-btn-outline" onClick={refresh}>重新检测</button>{" "}
   <button type="button" className="ui-btn ui-btn-outline" onClick={()=>native()?.openAppSettings?.()}>打开系统应用设置</button>

@@ -289,3 +289,27 @@
   padding: 4px 16px 8px;
 }
 .per-actions .ui-btn { flex: 1; }
+
+
+.per-tag-action {
+  border: 0;
+  font-family: inherit;
+  font-size: calc(10px * var(--app-text-scale, 1));
+  font-weight: 600;
+  line-height: normal;
+  cursor: pointer;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.per-tag-action:active { filter: brightness(1.12); transform: scale(.98); }
+
+
+/* 手机设置首页的信息卡文字略收小，适配窄屏。 */
+.settings-main-menu .card-label,
+.settings-main-menu .card-featured-label {
+  font-size: calc(13px * var(--app-text-scale, 1));
+}
+.settings-main-menu .card-desc,
+.settings-main-menu .card-featured-desc {
+  font-size: calc(9.5px * var(--app-text-scale, 1));
+}

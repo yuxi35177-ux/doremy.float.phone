@@ -36,6 +36,8 @@ import {
   hasHealthPermission,
   hasLocationPermission,
   hasStepPermission,
+  openHealthSettings,
+  openPerceptionSystemSettings,
   readHealthCapabilities,
   readLocationCapabilities,
   requestHealthPermission,
@@ -118,6 +120,41 @@ export function PerceptionSettings({ onNotice }: { onNotice?: (msg: string) => v
     savePerceptionConfig(config);
     setConfig(config);
   }, []);
+
+  const openRequirement = useCallback((row: (typeof rows)[number]) => {
+    let opened = false;
+    let message = "没能打开授权页面，请到手机系统设置里手动开启。";
+    if (row.id === "foregroundApp") {
+      opened = openPerceptionSystemSettings("accessibility");
+      message = "请在无障碍设置中找到小手机并开启服务，返回后会自动刷新状态。";
+    } else if (row.id === "usageStats") {
+      opened = openPerceptionSystemSettings("usage_stats");
+      message = "请在使用情况访问页面允许小手机读取应用使用时长，返回后会自动刷新。";
+    } else if (row.id === "location") {
+      if (!hasLocationPermission()) {
+        requestLocationPermission();
+        opened = true;
+        message = "请在系统弹窗中允许位置权限；若定位开关关闭，再到定位设置开启。";
+      } else {
+        opened = openPerceptionSystemSettings("location");
+        message = "请打开系统定位开关，返回后会自动刷新状态。";
+      }
+    } else if (row.id === "sleep") {
+      const health = readHealthCapabilities();
+      if (health.healthAvailable === true && !hasHealthPermission()) {
+        requestHealthPermission();
+        opened = true;
+        message = "请在 Health Connect 页面允许小手机读取睡眠数据。";
+      } else {
+        opened = openHealthSettings();
+        message = health.healthAvailable === true
+          ? "请检查 Health Connect 的睡眠读取授权和数据来源。"
+          : "请安装或更新 Health Connect，再回来授权睡眠读取。";
+      }
+    }
+    onNotice?.(opened ? message : "没能打开授权页面，请到手机系统设置里手动开启。");
+    window.setTimeout(refresh, 700);
+  }, [onNotice, refresh]);
 
   const toggleCapability = useCallback((id: PerceptionCapability, on: boolean) => {
     const current = loadPerceptionConfig();
@@ -281,9 +318,15 @@ export function PerceptionSettings({ onNotice }: { onNotice?: (msg: string) => v
                               {row.nativeSupported ? "App 已支持" : "当前版本不支持"}
                             </span>
                             {row.missingRequirement && (
-                              <span className="per-tag" data-tone="warn">
+                              <button
+                                type="button"
+                                className="per-tag per-tag-action"
+                                data-tone="warn"
+                                aria-label={`点击处理：${row.missingRequirement}`}
+                                onClick={() => openRequirement(row)}
+                              >
                                 <AlertCircle size={10} strokeWidth={2.4} /> {row.missingRequirement}
-                              </span>
+                              </button>
                             )}
                           </div>
                         </div>

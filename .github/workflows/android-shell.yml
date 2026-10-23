@@ -65,14 +65,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release-assets
-          cp android-shell/app/build/outputs/apk/debug/app-debug.apk release-assets/Doremy-vivoS17-1.0.14.apk
+          cp android-shell/app/build/outputs/apk/debug/app-debug.apk release-assets/Doremy-vivoS17-1.0.16.apk
           SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
-          "$SIGNER" verify --verbose release-assets/Doremy-vivoS17-1.0.14.apk
+          "$SIGNER" verify --verbose release-assets/Doremy-vivoS17-1.0.16.apk
           cd release-assets
           sha256sum *.apk > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Doremy-vivoS17-1.0.14
+          name: Doremy-vivoS17-1.0.16
           path: release-assets/*
       - name: Save compiled sources to the repository
         shell: bash
@@ -99,7 +99,7 @@ jobs:
 
           使用已配置的签名；未配置持久签名时为可安装的 Android 调试签名测试包。签名不同时不能覆盖旧包，请勿卸载旧应用来强装；先保留旧版及导出备份。真实 vivo S17 的权限、后台保活及硬件能力仍需本机验证。
           NOTES
-          gh release create "v1.0.14-vivo-${GITHUB_RUN_NUMBER}" release-assets/* --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --title 'Doremy vivo S17 1.0.14 安卓测试版' --notes-file "$RUNNER_TEMP/notes.md" --prerelease
+          gh release create "v1.0.16-vivo-${GITHUB_RUN_NUMBER}" release-assets/* --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --title 'Doremy vivo S17 1.0.16 安卓测试版' --notes-file "$RUNNER_TEMP/notes.md" --prerelease
       - name: Remove temporary signing files
         if: always()
         run: rm -f "$RUNNER_TEMP/phone.keystore" "$RUNNER_TEMP/phone.keystore.enc"

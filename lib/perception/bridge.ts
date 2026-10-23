@@ -34,6 +34,7 @@ type PerceptionBridgeLike = {
   refreshHealth?: () => void;
   getHealthDiagnostics?: () => string;
   openHealthSettings?: () => boolean;
+  openSystemSettings?: (which: string) => boolean;
 };
 
 function bridge(): PerceptionBridgeLike | null {
@@ -337,6 +338,15 @@ export function refreshHealth(): void {
 export function openHealthSettings(): boolean {
   try {
     return bridge()?.openHealthSettings?.() === true;
+  } catch {
+    return false;
+  }
+}
+
+/** 打开安卓系统授权页；浏览器和旧壳安全降级为 false。 */
+export function openPerceptionSystemSettings(which: "accessibility" | "usage_stats" | "location"): boolean {
+  try {
+    return bridge()?.openSystemSettings?.(which) === true;
   } catch {
     return false;
   }
