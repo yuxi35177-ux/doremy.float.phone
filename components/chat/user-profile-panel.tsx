@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { PersonaSwitcher } from "./persona-switcher";
 import CSSSchemeBar from "@/components/ui/css-scheme-picker";
 import {
     loadFollowUpConfig,
@@ -398,7 +399,7 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                         <div className="flex flex-col flex-1 justify-center gap-2">
                             {/* Top Row: Name and Identity Badge */}
                             <div className="flex items-center justify-between w-full mb-0.5">
-                                <div className="ts-22 font-bold text-[var(--c-text-title)] leading-none truncate">{identity?.name || "未设置身份"}</div>
+                                <div className="min-w-0 flex items-center gap-1"><div className="ts-22 font-bold text-[var(--c-text-title)] leading-none truncate">{identity?.name || "未设置身份"}</div><PersonaSwitcher /></div>
                                 <div className="flex items-center gap-1.5 ts-11 font-medium bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-full shrink-0 text-[var(--c-text)] opacity-80">
                                     <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />
                                     手机在线

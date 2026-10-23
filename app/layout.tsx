@@ -1,3 +1,4 @@
+import { ColorModeController } from "@/components/color-mode";
 import { ShellBackController } from "@/components/shell-back-controller";
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
@@ -33,7 +34,7 @@ export default function RootLayout({
   children: ReactNode;
 }>) {
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.webmanifest" crossOrigin="use-credentials" />
         <meta name="theme-color" content="#f8f7f2" />
@@ -47,6 +48,7 @@ export default function RootLayout({
       </head>
       <body>
         <ShellBackController />
+        <ColorModeController />
         <PWAManifestInjector />
         <PWARegistrar />
         <CSSImportEnhancer />
