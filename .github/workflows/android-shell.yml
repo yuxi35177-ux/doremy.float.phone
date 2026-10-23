@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['android-shell/**', '.github/workflows/android-shell.yml']
+    paths: ['android-shell/**', '.github/workflows/**']
 permissions:
   contents: write
 concurrency:
