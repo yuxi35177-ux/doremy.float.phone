@@ -48,6 +48,7 @@ class MediaControlListenerService : NotificationListenerService() {
             }
             val rows = activeNotifications.orEmpty().asSequence()
                 .filter { it.packageName != packageName }
+                .toList()
                 .takeLast(10)
                 .map { sbn ->
                     org.json.JSONObject().put("app", sbn.packageName)
