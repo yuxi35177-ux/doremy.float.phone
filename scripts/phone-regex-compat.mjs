@@ -1,13 +1,23 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { transformAsync } from '@babel/core';
+import { transformAsync, transformSync } from '@babel/core';
 import unicodePropertyRegex from '@babel/plugin-transform-unicode-property-regex';
 import rewritePattern from 'regexpu-core';
 const require = createRequire(import.meta.url);
 
 // Node Mobile has no ICU property tables. Preserve Unicode semantics by emitting
 // explicit ranges at build time; never replace Chinese/emoji matching with ASCII.
+function embeddedScripts() {
+  function convert(p,value) {
+    if (typeof value !== 'string' || value.length < 500 || !/\\[pP]\{/.test(value) || !/\b(?:function|const|var|let)\b/.test(value)) return;
+    try {
+      const code = transformSync(value,{...options,plugins:[embeddedScripts,patternConstants,[unicodePropertyRegex,{useUnicodeFlag:true}]]}).code;
+      p.replaceWith({type:'StringLiteral',value:code}); p.skip();
+    } catch (error) { throw new Error('Cannot compile embedded mobile script: '+error.message); }
+  }
+  return {visitor:{StringLiteral(p){convert(p,p.node.value);},TemplateLiteral(p){if(!p.node.expressions.length)convert(p,p.node.quasis[0].value.cooked);}}};
+}
 function patternConstants() {
   const isConstructor = p => p && (p.isNewExpression() || p.isCallExpression()) &&
     p.node.callee.type === 'Identifier' && p.node.callee.name === 'RegExp';
@@ -33,7 +43,7 @@ function patternConstants() {
   }};
 }
 const options = {babelrc:false,configFile:false,sourceType:'unambiguous',compact:true,
-  comments:false, plugins:[patternConstants,[unicodePropertyRegex,{useUnicodeFlag:true}]]};
+  comments:false, plugins:[embeddedScripts,patternConstants,[unicodePropertyRegex,{useUnicodeFlag:true}]]};
 export async function makeMobileRegexCompatible(directory) {
   let changed = 0;
   async function visit(folder) {

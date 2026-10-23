@@ -16,7 +16,8 @@ MobileRegExp.prototype = NativeRegExp.prototype;
 globalThis.RegExp = MobileRegExp;
 try { new globalThis.TextDecoder('utf-8', {fatal:true}); }
 catch (_) {
-  const Decoder = require('@cto.af/textdecoder/polyfill.js');
+  const BaseDecoder = require('@cto.af/textdecoder/polyfill.js');
+  class Decoder extends BaseDecoder { decode(input = new Uint8Array(), options) { return super.decode(input, options); } }
   globalThis.TextDecoder = Decoder;
   require('node:util').TextDecoder = Decoder;
 }

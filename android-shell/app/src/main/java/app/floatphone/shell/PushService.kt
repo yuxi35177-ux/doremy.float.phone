@@ -80,6 +80,7 @@ class PushService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        LocalRuntime.start(this)
         running = true
         createChannels()
         startForeground(NOTIF_FG_ID, buildKeepAliveNotification("等待连接…"))

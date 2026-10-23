@@ -658,7 +658,7 @@ index cbbbeef..8f1e7cc 100644
              }
              override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
 diff --git a/android-shell/app/src/main/java/app/floatphone/shell/PushService.kt b/android-shell/app/src/main/java/app/floatphone/shell/PushService.kt
-index 2e49599..9a04f38 100644
+index 2e49599..6359fcb 100644
 --- a/android-shell/app/src/main/java/app/floatphone/shell/PushService.kt
 +++ b/android-shell/app/src/main/java/app/floatphone/shell/PushService.kt
 @@ -50,6 +50,7 @@ class PushService : Service() {
@@ -677,6 +677,14 @@ index 2e49599..9a04f38 100644
          .pingInterval(25, TimeUnit.SECONDS)
          .readTimeout(0, TimeUnit.MILLISECONDS)
          .build()
+@@ -78,6 +80,7 @@ class PushService : Service() {
+ 
+     override fun onCreate() {
+         super.onCreate()
++        LocalRuntime.start(this)
+         running = true
+         createChannels()
+         startForeground(NOTIF_FG_ID, buildKeepAliveNotification("等待连接…"))
 diff --git a/components/perception/perception-settings.tsx b/components/perception/perception-settings.tsx
 index fe72607..049e2db 100644
 --- a/components/perception/perception-settings.tsx
@@ -2426,20 +2434,30 @@ index 0000000..1588f93
 +Intl.DateTimeFormat.__setDefaultTimeZone?.(process.env.TZ || 'Asia/Shanghai');
 diff --git a/scripts/phone-regex-compat.mjs b/scripts/phone-regex-compat.mjs
 new file mode 100644
-index 0000000..6585d1c
+index 0000000..a4f557a
 --- /dev/null
 +++ b/scripts/phone-regex-compat.mjs
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,67 @@
 +import fs from 'node:fs/promises';
 +import path from 'node:path';
 +import { createRequire } from 'node:module';
-+import { transformAsync } from '@babel/core';
++import { transformAsync, transformSync } from '@babel/core';
 +import unicodePropertyRegex from '@babel/plugin-transform-unicode-property-regex';
 +import rewritePattern from 'regexpu-core';
 +const require = createRequire(import.meta.url);
 +
 +// Node Mobile has no ICU property tables. Preserve Unicode semantics by emitting
 +// explicit ranges at build time; never replace Chinese/emoji matching with ASCII.
++function embeddedScripts() {
++  function convert(p,value) {
++    if (typeof value !== 'string' || value.length < 500 || !/\\[pP]\{/.test(value) || !/\b(?:function|const|var|let)\b/.test(value)) return;
++    try {
++      const code = transformSync(value,{...options,plugins:[embeddedScripts,patternConstants,[unicodePropertyRegex,{useUnicodeFlag:true}]]}).code;
++      p.replaceWith({type:'StringLiteral',value:code}); p.skip();
++    } catch (error) { throw new Error('Cannot compile embedded mobile script: '+error.message); }
++  }
++  return {visitor:{StringLiteral(p){convert(p,p.node.value);},TemplateLiteral(p){if(!p.node.expressions.length)convert(p,p.node.quasis[0].value.cooked);}}};
++}
 +function patternConstants() {
 +  const isConstructor = p => p && (p.isNewExpression() || p.isCallExpression()) &&
 +    p.node.callee.type === 'Identifier' && p.node.callee.name === 'RegExp';
@@ -2465,7 +2483,7 @@ index 0000000..6585d1c
 +  }};
 +}
 +const options = {babelrc:false,configFile:false,sourceType:'unambiguous',compact:true,
-+  comments:false, plugins:[patternConstants,[unicodePropertyRegex,{useUnicodeFlag:true}]]};
++  comments:false, plugins:[embeddedScripts,patternConstants,[unicodePropertyRegex,{useUnicodeFlag:true}]]};
 +export async function makeMobileRegexCompatible(directory) {
 +  let changed = 0;
 +  async function visit(folder) {
@@ -2489,10 +2507,10 @@ index 0000000..6585d1c
 +}
 diff --git a/scripts/phone-runtime-compat.cjs b/scripts/phone-runtime-compat.cjs
 new file mode 100644
-index 0000000..d0e9d46
+index 0000000..5078d35
 --- /dev/null
 +++ b/scripts/phone-runtime-compat.cjs
-@@ -0,0 +1,23 @@
+@@ -0,0 +1,24 @@
 +// Install before loading Next: the embedded Node build intentionally omits ICU.
 +const rewrite = require('regexpu-core');
 +const NativeRegExp = globalThis.RegExp;
@@ -2511,7 +2529,8 @@ index 0000000..d0e9d46
 +globalThis.RegExp = MobileRegExp;
 +try { new globalThis.TextDecoder('utf-8', {fatal:true}); }
 +catch (_) {
-+  const Decoder = require('@cto.af/textdecoder/polyfill.js');
++  const BaseDecoder = require('@cto.af/textdecoder/polyfill.js');
++  class Decoder extends BaseDecoder { decode(input = new Uint8Array(), options) { return super.decode(input, options); } }
 +  globalThis.TextDecoder = Decoder;
 +  require('node:util').TextDecoder = Decoder;
 +}
