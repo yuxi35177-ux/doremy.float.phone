@@ -1,0 +1,101 @@
+name: Build Hazel Local Android APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [local-apk-20261023]
+
+permissions:
+  contents: write
+concurrency:
+  group: android-local-hazel-release
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: phone
+    env:
+      SHELL_SITE_URL: "https://ai-virtual-phone-hazel-six.vercel.app"
+      SHELL_KEYSTORE_BASE64: ${{ secrets.SHELL_KEYSTORE_BASE64 }}
+      SHELL_KEYSTORE_PASSWORD: ${{ secrets.SHELL_KEYSTORE_PASSWORD || secrets.SHELL_SIGNING_PASSWORD }}
+      SHELL_KEY_ALIAS: ${{ secrets.SHELL_KEY_ALIAS || 'doremy' }}
+      SHELL_KEY_PASSWORD: ${{ secrets.SHELL_KEY_PASSWORD || secrets.SHELL_SIGNING_PASSWORD }}
+      SIGNING_PASSWORD: ${{ secrets.SHELL_SIGNING_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: build-data
+      - uses: actions/checkout@v4
+        with:
+          repository: yuxi35177-ux/ai-virtual-phone
+          ref: c4f6b4f57e466196a043c1fa05465ce6589661f9
+          path: phone
+      - name: Apply reviewed local APK sources
+        run: git apply --check ../build-data/scripts/hazel-local-apk.patch && git apply ../build-data/scripts/hazel-local-apk.patch
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build bundled application and local API server
+        run: bash scripts/build-phone-local.sh
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android 36 SDK
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Restore existing signing when configured
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          if [ -n "$SHELL_KEYSTORE_BASE64" ]; then
+            printf '%s' "$SHELL_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/phone.keystore"
+          elif [ -n "$SIGNING_PASSWORD" ]; then
+            if [ ! -f android-shell/signing/doremy.keystore.enc ]; then
+              git fetch --depth=1 origin release/doremy-apk-1.0.13
+              git show FETCH_HEAD:android-shell/signing/doremy.keystore.enc > "$RUNNER_TEMP/phone.keystore.enc"
+              openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in "$RUNNER_TEMP/phone.keystore.enc" -out "$RUNNER_TEMP/phone.keystore" -pass env:SIGNING_PASSWORD
+            else
+              openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in android-shell/signing/doremy.keystore.enc -out "$RUNNER_TEMP/phone.keystore" -pass env:SIGNING_PASSWORD
+            fi
+          fi
+          if [ -s "$RUNNER_TEMP/phone.keystore" ]; then
+            echo "SHELL_KEYSTORE_FILE=$RUNNER_TEMP/phone.keystore" >> "$GITHUB_ENV"
+          fi
+      - name: Require existing signing for a data-preserving update
+        run: test -s "$SHELL_KEYSTORE_FILE"
+      - name: Compile and build installable APK
+        run: gradle -p android-shell --no-daemon compileDebugKotlin assembleDebug
+      - name: Verify and package APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          cp android-shell/app/build/outputs/apk/debug/app-debug.apk release-assets/Hazel-vivoS17-1.0.17-local.apk
+          SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          "$SIGNER" verify --verbose release-assets/Hazel-vivoS17-1.0.17-local.apk
+          cd release-assets
+          sha256sum *.apk > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Hazel-vivoS17-1.0.17-local
+          path: phone/release-assets/*
+      - name: Publish APK download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
+          本地运行测试版：页面和 Next API 随 APK 安装，不从 Vercel 下载网页。模型、联网素材和个人云仍需相应网络服务与配置。保留原名称、图标、包名和已配置签名，覆盖安装不清空 WebView 数据。
+          修复设置卡片溢出、系统字体重复放大，打包完整感知设置、权限入口及原生功能。
+          首次启动需要解压本地文件。仍需 vivo S17 真机验证，暂不删除线上正式站。公共云账号和服务端共享数据库不能装入 APK；使用项目原有自托管/个人云配置。
+          NOTES
+          gh release create "hazel-local-apk-v1.0.17-${GITHUB_RUN_NUMBER}" release-assets/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Hazel 本地 APK 1.0.17 测试版' --notes-file "$RUNNER_TEMP/notes.md" --prerelease
+      - name: Remove temporary signing files
+        if: always()
+        run: rm -f "$RUNNER_TEMP/phone.keystore" "$RUNNER_TEMP/phone.keystore.enc"

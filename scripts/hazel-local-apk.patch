@@ -1,0 +1,865 @@
+diff --git a/.github/workflows/android-local.yml b/.github/workflows/android-local.yml
+new file mode 100644
+index 0000000..b491539
+--- /dev/null
++++ b/.github/workflows/android-local.yml
+@@ -0,0 +1,89 @@
++name: Build Local Android APK
++on:
++  workflow_dispatch:
++  push:
++    branches: [local-apk-20261023]
++
++permissions:
++  contents: write
++concurrency:
++  group: android-local-release
++  cancel-in-progress: false
++jobs:
++  build:
++    runs-on: ubuntu-latest
++    env:
++      SHELL_SITE_URL: "https://ai-virtual-phone-hazel-six.vercel.app"
++      SHELL_KEYSTORE_BASE64: ${{ secrets.SHELL_KEYSTORE_BASE64 }}
++      SHELL_KEYSTORE_PASSWORD: ${{ secrets.SHELL_KEYSTORE_PASSWORD || secrets.SHELL_SIGNING_PASSWORD }}
++      SHELL_KEY_ALIAS: ${{ secrets.SHELL_KEY_ALIAS || 'doremy' }}
++      SHELL_KEY_PASSWORD: ${{ secrets.SHELL_KEY_PASSWORD || secrets.SHELL_SIGNING_PASSWORD }}
++      SIGNING_PASSWORD: ${{ secrets.SHELL_SIGNING_PASSWORD }}
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-node@v4
++        with:
++          node-version: '22'
++      - name: Build bundled application and local API server
++        run: bash scripts/build-phone-local.sh
++      - uses: actions/setup-java@v4
++        with:
++          distribution: temurin
++          java-version: '17'
++      - name: Install Android 36 SDK
++        run: |
++          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
++      - uses: gradle/actions/setup-gradle@v4
++        with:
++          gradle-version: '8.11.1'
++      - name: Restore existing signing when configured
++        shell: bash
++        run: |
++          set -euo pipefail
++          umask 077
++          if [ -n "$SHELL_KEYSTORE_BASE64" ]; then
++            printf '%s' "$SHELL_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/phone.keystore"
++          elif [ -n "$SIGNING_PASSWORD" ]; then
++            if [ ! -f android-shell/signing/doremy.keystore.enc ]; then
++              git fetch --depth=1 origin release/doremy-apk-1.0.13
++              git show FETCH_HEAD:android-shell/signing/doremy.keystore.enc > "$RUNNER_TEMP/phone.keystore.enc"
++              openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in "$RUNNER_TEMP/phone.keystore.enc" -out "$RUNNER_TEMP/phone.keystore" -pass env:SIGNING_PASSWORD
++            else
++              openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in android-shell/signing/doremy.keystore.enc -out "$RUNNER_TEMP/phone.keystore" -pass env:SIGNING_PASSWORD
++            fi
++          fi
++          if [ -s "$RUNNER_TEMP/phone.keystore" ]; then
++            echo "SHELL_KEYSTORE_FILE=$RUNNER_TEMP/phone.keystore" >> "$GITHUB_ENV"
++          fi
++      - name: Require existing signing for a data-preserving update
++        run: test -s "$SHELL_KEYSTORE_FILE"
++      - name: Compile and build installable APK
++        run: gradle -p android-shell --no-daemon compileDebugKotlin assembleDebug
++      - name: Verify and package APK
++        shell: bash
++        run: |
++          set -euo pipefail
++          mkdir -p release-assets
++          cp android-shell/app/build/outputs/apk/debug/app-debug.apk release-assets/Hazel-vivoS17-1.0.17-local.apk
++          SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
++          "$SIGNER" verify --verbose release-assets/Hazel-vivoS17-1.0.17-local.apk
++          cd release-assets
++          sha256sum *.apk > SHA256SUMS.txt
++      - uses: actions/upload-artifact@v4
++        with:
++          name: Hazel-vivoS17-1.0.17-local
++          path: release-assets/*
++      - name: Publish APK download
++        env:
++          GH_TOKEN: ${{ github.token }}
++        shell: bash
++        run: |
++          cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
++          本地运行测试版：页面和 Next API 随 APK 安装，不从 Vercel 下载网页。模型、联网素材和个人云仍需相应网络服务与配置。保留原名称、图标、包名和已配置签名，覆盖安装不清空 WebView 数据。
++          修复设置卡片溢出、系统字体重复放大，打包完整感知设置、权限入口及原生功能。
++          首次启动需要解压本地文件。仍需 vivo S17 真机验证，暂不删除线上正式站。公共云账号和服务端共享数据库不能装入 APK；使用项目原有自托管/个人云配置。
++          NOTES
++          gh release create "local-apk-v1.0.17-${GITHUB_RUN_NUMBER}" release-assets/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Hazel 本地 APK 1.0.17 测试版' --notes-file "$RUNNER_TEMP/notes.md" --prerelease
++      - name: Remove temporary signing files
++        if: always()
++        run: rm -f "$RUNNER_TEMP/phone.keystore" "$RUNNER_TEMP/phone.keystore.enc"
+diff --git a/.gitignore b/.gitignore
+index 3389b68..8b70391 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -36,3 +36,7 @@ tools/weixin-local-assistant/config.txt
+ /android-shell/build/
+ 
+ /android-shell/local.properties
++
++/.phone-server/
++/android-shell/app/src/main/assets/phone-server.zip
++/android-shell/app/libnode/
+diff --git a/android-shell/app/build.gradle b/android-shell/app/build.gradle
+index c16c262..4801f0a 100644
+--- a/android-shell/app/build.gradle
++++ b/android-shell/app/build.gradle
+@@ -15,10 +15,16 @@ android {
+     // targetSdk 决定运行时的行为约定（如边到边布局），动它会影响已经调好的
+     // WebView 全屏布局，那是另一件事，得单独验证，不该顺手带上。
+     compileSdk 36
++    ndkVersion "27.2.12479018"
++    externalNativeBuild { cmake { path file("src/main/cpp/CMakeLists.txt"); version "3.22.1" } }
++    sourceSets { main { jniLibs.srcDirs = ["libnode/bin"] } }
++    packaging { jniLibs { useLegacyPackaging = true } }
+ 
+     defaultConfig {
+         applicationId "app.floatphone.hazel"
+         minSdk 26
++        ndk { abiFilters "arm64-v8a" }
++        buildConfigField "boolean", "LOCAL_BUNDLE", "true"
+         targetSdk 34
+         // versionCode 必须严格递增，否则 Android 拒绝覆盖安装（表现为「应用未安装」）。
+         // 1.0.7：回复条配色逐项自定义；1.0.8：浮窗自检与失败留痕。
+@@ -26,8 +32,8 @@ android {
+         // 1.0.10：浮窗改圆角矩形；浮窗左上角显示「待发 N」角标。
+         // 1.0.11：截屏与主动查岗（含查岗浮层回复框）；通知栏「直接回复」。
+         // 1.0.12：截屏可选收件人；位置感知；睡眠（Health Connect）。
+-        versionCode 15
+-        versionName "1.0.15"
++        versionCode 17
++        versionName "1.0.17-local"
+         buildConfigField "String", "SITE_URL", groovy.json.JsonOutput.toJson(siteUrl)
+     }
+ 
+@@ -83,4 +89,4 @@ dependencies {
+     // Health Connect 的读取 API 是挂起函数，而桥要让网页同步读，所以用协程
+     // 在后台取、取完写进缓存。显式声明而不是靠传递依赖，避免版本变动就编译失败。
+     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+-}
++}
+\ No newline at end of file
+diff --git a/android-shell/app/src/main/assets/phone-local-transport.js b/android-shell/app/src/main/assets/phone-local-transport.js
+new file mode 100644
+index 0000000..ed322f1
+--- /dev/null
++++ b/android-shell/app/src/main/assets/phone-local-transport.js
+@@ -0,0 +1,61 @@
++(() => {
++  if (window.__PHONE_LOCAL__) return;
++  window.__PHONE_LOCAL__ = true;
++  const originalFetch = window.fetch.bind(window);
++  const bridge = window.FloatLocalHttp;
++  if (!bridge) throw new Error('本地请求桥不可用，请更新 Android System WebView');
++  const pending = new Map();
++  const base64 = bytes => {
++    let binary = '';
++    for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
++    return btoa(binary);
++  };
++  bridge.onmessage = event => {
++    try { const reply = JSON.parse(event.data); pending.get(reply.id)?.(reply); } catch (_) {}
++  };
++  window.fetch = async (input, init) => {
++    const request = new Request(input, init);
++    if (new URL(request.url).origin !== location.origin) return originalFetch(request);
++    const id = crypto.randomUUID();
++    const body = ['GET','HEAD'].includes(request.method) ? null : base64(new Uint8Array(await request.arrayBuffer()));
++    return new Promise((resolve, reject) => {
++      let control, donePull, settled = false;
++      const send = (type, extra = {}) => bridge.postMessage(JSON.stringify({id, type, ...extra}));
++      const cleanup = () => { clearTimeout(timer); pending.delete(id); request.signal.removeEventListener('abort', abort); donePull?.(); };
++      const fail = error => { cleanup(); send('cancel'); if (settled) control?.error(error); else reject(error); };
++      const abort = () => fail(new DOMException('Aborted','AbortError'));
++      const timer = setTimeout(() => fail(new Error('本地接口响应超时')), 120000);
++      if (request.signal.aborted) { abort(); return; }
++      request.signal.addEventListener('abort', abort, {once:true});
++      pending.set(id, reply => {
++        if (reply.type === 'error') { fail(new Error('本地接口请求失败')); return; }
++        if (reply.type === 'headers') {
++          settled = true;
++          const stream = request.method === 'HEAD' || [204,205,304].includes(reply.status) ? null : new ReadableStream({
++            start(c) { control = c; },
++            pull() { return new Promise(done => { donePull = done; send('pull'); }); },
++            cancel() { cleanup(); send('cancel'); }
++          });
++          const response = new Response(stream, {status:reply.status, headers:reply.headers || {'content-type':reply.contentType}});
++          Object.defineProperty(response, 'url', {value:request.url});
++          resolve(response);
++          if (!stream) { cleanup(); send('cancel'); }
++        } else if (reply.type === 'chunk') {
++          control.enqueue(Uint8Array.from(atob(reply.data), c => c.charCodeAt(0)));
++          const done = donePull; donePull = null; done?.();
++        } else if (reply.type === 'end') { cleanup(); control?.close(); }
++      });
++      send('start', {url:request.url, method:request.method, headers:Object.fromEntries(request.headers), body, bodyBase64:true});
++    });
++  };
++  // An older online service worker must not serve old bundles over this APK.
++  if ('serviceWorker' in navigator) {
++    navigator.serviceWorker.getRegistrations().then(async registrations => {
++      const hadController = !!navigator.serviceWorker.controller;
++      await Promise.all(registrations.map(registration => registration.unregister()));
++      if (hadController && !sessionStorage.getItem('phone-local-sw-reset')) {
++        sessionStorage.setItem('phone-local-sw-reset','1'); location.reload();
++      }
++    });
++  }
++})();
+diff --git a/android-shell/app/src/main/cpp/CMakeLists.txt b/android-shell/app/src/main/cpp/CMakeLists.txt
+new file mode 100644
+index 0000000..e685ceb
+--- /dev/null
++++ b/android-shell/app/src/main/cpp/CMakeLists.txt
+@@ -0,0 +1,7 @@
++cmake_minimum_required(VERSION 3.22.1)
++project(phone_local)
++add_library(node SHARED IMPORTED)
++set_target_properties(node PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/../../../libnode/bin/${ANDROID_ABI}/libnode.so)
++add_library(phone-local SHARED runtime.cpp)
++target_include_directories(phone-local PRIVATE ../../../libnode/include/node)
++target_link_libraries(phone-local node log)
+diff --git a/android-shell/app/src/main/cpp/runtime.cpp b/android-shell/app/src/main/cpp/runtime.cpp
+new file mode 100644
+index 0000000..f4c3106
+--- /dev/null
++++ b/android-shell/app/src/main/cpp/runtime.cpp
+@@ -0,0 +1,23 @@
++#include <jni.h>
++#include <cstdlib>
++#include <cstring>
++#include <unistd.h>
++#include <vector>
++#include <string>
++#include "node.h"
++extern "C" JNIEXPORT jint JNICALL
++Java_app_floatphone_shell_LocalRuntime_startNode(JNIEnv* env, jobject, jstring dir, jint port, jstring key) {
++    const char* root = env->GetStringUTFChars(dir, nullptr);
++    const char* secret = env->GetStringUTFChars(key, nullptr);
++    chdir(root);
++    setenv("HOSTNAME", "127.0.0.1", 1);
++    setenv("PORT", std::to_string(port).c_str(), 1);
++    setenv("PHONE_LOCAL_TOKEN", secret, 1);
++    setenv("NODE_ENV", "production", 1);
++    env->ReleaseStringUTFChars(dir, root);
++    env->ReleaseStringUTFChars(key, secret);
++    // libuv expects the argument strings to occupy contiguous memory.
++    char args[] = "node\0phone-bootstrap.cjs\0";
++    char* argv[] = { args, args + 5 };
++    return node::Start(2, argv);
++}
+diff --git a/android-shell/app/src/main/java/app/floatphone/shell/DeviceActionBridge.kt b/android-shell/app/src/main/java/app/floatphone/shell/DeviceActionBridge.kt
+index 73f718e..f17449f 100644
+--- a/android-shell/app/src/main/java/app/floatphone/shell/DeviceActionBridge.kt
++++ b/android-shell/app/src/main/java/app/floatphone/shell/DeviceActionBridge.kt
+@@ -849,10 +849,14 @@ class DeviceActionBridge(private val context: Context) {
+         .put("dnd", true)
+         .put("dndGranted", canSetDnd())
+         .put("openApp", true)
+-        // 闹钟/倒计时原来写死 true，不管手机有没有时钟都应「支持」——检测里那行
+-        // 「App 已支持」因此是空的。现在真去查能不能拉起，查不到就如实报 false。
+-        .put("alarm", canHandleAlarmIntent(AlarmClock.ACTION_SET_ALARM))
+-        .put("timer", canHandleAlarmIntent(AlarmClock.ACTION_SET_TIMER))
++        // 壳已经实现 ACTION_SET_ALARM / ACTION_SET_TIMER，并声明了系统时钟要求的
++        // SET_ALARM 调用权限。部分 vivo 时钟不把这两个入口暴露给包可见性查询，
++        // 但仍能由 startActivity 正常拉起；因此能力状态按“本壳实现了动作”报告，
++        // 实际调用失败时再由 setAlarm/setTimer 返回系统的明确错误。
++        .put("alarm", true)
++        .put("timer", true)
++        .put("clockAlarmHandlerFound", canHandleAlarmIntent(AlarmClock.ACTION_SET_ALARM))
++        .put("clockTimerHandlerFound", canHandleAlarmIntent(AlarmClock.ACTION_SET_TIMER))
+         .put("media", true)
+         // 有没有「通知使用权」——有它才能读活跃媒体会话、确认播放指令是否生效。
+         // 与 media=true 分开报：媒体控制本身随时能用（盲发按键），
+diff --git a/android-shell/app/src/main/java/app/floatphone/shell/LocalApiBridge.kt b/android-shell/app/src/main/java/app/floatphone/shell/LocalApiBridge.kt
+index 3d8cc56..b087832 100644
+--- a/android-shell/app/src/main/java/app/floatphone/shell/LocalApiBridge.kt
++++ b/android-shell/app/src/main/java/app/floatphone/shell/LocalApiBridge.kt
+@@ -19,7 +19,7 @@ import java.util.concurrent.Semaphore
+ import java.util.concurrent.TimeUnit
+ 
+ /** Origin-scoped, main-frame-only transport for phone-local AI endpoints. No cloud proxy. */
+-class LocalApiBridge(private val webView: WebView, siteUrl: String) {
++class LocalApiBridge(private val webView: WebView, siteUrl: String, private val bundled: Boolean = false) {
+     private val origin = Uri.parse(siteUrl).buildUpon().path(null).query(null).fragment(null).build().toString().trimEnd('/')
+     private val client = OkHttpClient.Builder()
+         .connectTimeout(10, TimeUnit.SECONDS)
+@@ -38,7 +38,7 @@ class LocalApiBridge(private val webView: WebView, siteUrl: String) {
+ 
+     fun attach() {
+         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return
+-        WebViewCompat.addWebMessageListener(webView, "FloatLocalApi", setOf(origin)) { _, message, source, isMainFrame, reply ->
++        WebViewCompat.addWebMessageListener(webView, if (bundled) "FloatLocalHttp" else "FloatLocalApi", setOf(origin)) { _, message, source, isMainFrame, reply ->
+             if (!isMainFrame || source.toString().trimEnd('/') != origin) return@addWebMessageListener
+             val json = runCatching { JSONObject(message.data ?: "") }.getOrNull() ?: return@addWebMessageListener
+             val id = json.optString("id")
+@@ -60,31 +60,41 @@ class LocalApiBridge(private val webView: WebView, siteUrl: String) {
+     private fun start(id: String, json: JSONObject, reply: JavaScriptReplyProxy) {
+         if (transfers.containsKey(id)) return
+         val request = runCatching {
+-            require(transfers.size < 8)
++            require(transfers.size < if (bundled) 64 else 8)
+             val uri = Uri.parse(json.getString("url"))
+             require(uri.scheme == "http" || uri.scheme == "https")
+             require(uri.userInfo == null && uri.fragment == null)
+-            // No DNS for localhost: map it to a numeric loopback address.
+-            require(uri.host?.lowercase() in setOf("localhost", "127.0.0.1", "::1", "[::1]"))
+-            require(uri.port == -1 || uri.port in 1..65535)
+-            val path = uri.path ?: ""
+-            require(Regex("/(models|chat/completions|embeddings|messages)$").containsMatchIn(path) ||
+-                Regex("/models/[^/]+:(streamGenerateContent|generateContent)$").containsMatchIn(path))
+-            val target = if (uri.host == "localhost") uri.buildUpon().encodedAuthority(
+-                "127.0.0.1" + if (uri.port > 0) ":${uri.port}" else ""
+-            ).build().toString() else uri.toString()
++            val ownOrigin = uri.scheme + "://" + uri.authority
+             val method = json.optString("method", "GET").uppercase()
+-            require(method == "GET" || method == "POST")
+-            val body = if (json.isNull("body")) "" else json.getString("body")
+-            require(body.toByteArray(Charsets.UTF_8).size <= 16 * 1024 * 1024)
+-            val builder = Request.Builder().url(target)
++            val rawBody = if (json.isNull("body")) "" else json.getString("body")
++            val bytes = if (bundled && json.optBoolean("bodyBase64")) Base64.decode(rawBody, Base64.DEFAULT)
++                else rawBody.toByteArray(Charsets.UTF_8)
++            require(bytes.size <= 64 * 1024 * 1024)
++            val target = if (bundled) {
++                require(ownOrigin == origin)
++                require(method in setOf("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"))
++                uri.toString()
++            } else {
++                require(uri.host?.lowercase() in setOf("localhost", "127.0.0.1", "::1", "[::1]"))
++                require(uri.port == -1 || uri.port in 1..65535)
++                val path = uri.path ?: ""
++                require(Regex("/(models|chat/completions|embeddings|messages)$").containsMatchIn(path) ||
++                    Regex("/models/[^/]+:(streamGenerateContent|generateContent)$").containsMatchIn(path))
++                require(method == "GET" || method == "POST")
++                if (uri.host == "localhost") uri.buildUpon().encodedAuthority(
++                    "127.0.0.1" + if (uri.port > 0) ":${uri.port}" else ""
++                ).build().toString() else uri.toString()
++            }
++            val builder = if (bundled) LocalRuntime.requestFor(uri) else Request.Builder().url(target)
+             val headers = json.optJSONObject("headers") ?: JSONObject()
+             headers.keys().forEach { name ->
+-                if (name.lowercase() in setOf("authorization", "content-type", "x-api-key", "anthropic-version", "accept")) {
++                if ((bundled && name.lowercase() !in setOf("host", "connection", "content-length", "cookie", "accept-encoding", "x-phone-local-token")) || name.lowercase() in setOf("authorization", "content-type", "x-api-key", "anthropic-version", "accept")) {
+                     builder.header(name, headers.getString(name))
+                 }
+             }
+-            builder.method(method, if (method == "POST") body.toRequestBody("application/json".toMediaType()) else null).build()
++            if (bundled) android.webkit.CookieManager.getInstance().getCookie(origin)?.let { builder.header("Cookie", it) }
++            val contentType = headers.optString("content-type", "application/json").toMediaType()
++            builder.method(method, if (method !in setOf("GET", "HEAD")) bytes.toRequestBody(contentType) else null).build()
+         }.getOrNull()
+         if (request == null) {
+             post(reply, JSONObject().put("id", id).put("type", "error"))
+@@ -107,7 +117,11 @@ class LocalApiBridge(private val webView: WebView, siteUrl: String) {
+             override fun onResponse(call: Call, response: Response) {
+                 response.use {
+                     try {
++                        if (bundled) response.headers("Set-Cookie").forEach { android.webkit.CookieManager.getInstance().setCookie(origin, it) }
+                         deliver("headers") {
++                            it.put("headers", JSONObject(response.headers.toMultimap().filterKeys { name ->
++                                name.lowercase() !in setOf("set-cookie", "content-encoding", "content-length")
++                            }.mapValues { header -> header.value.joinToString(", ") }))
+                             it.put("status", response.code)
+                                 .put("contentType", response.header("Content-Type") ?: "application/json")
+                         }
+diff --git a/android-shell/app/src/main/java/app/floatphone/shell/LocalRuntime.kt b/android-shell/app/src/main/java/app/floatphone/shell/LocalRuntime.kt
+new file mode 100644
+index 0000000..b2241b2
+--- /dev/null
++++ b/android-shell/app/src/main/java/app/floatphone/shell/LocalRuntime.kt
+@@ -0,0 +1,137 @@
++package app.floatphone.shell
++
++import android.content.Context
++import android.net.Uri
++import android.webkit.WebResourceRequest
++import android.webkit.WebResourceResponse
++import android.webkit.CookieManager
++import okhttp3.OkHttpClient
++import okhttp3.Request
++import java.io.File
++import java.io.ByteArrayInputStream
++import java.net.ServerSocket
++import java.util.UUID
++import java.util.concurrent.CountDownLatch
++import java.util.concurrent.TimeUnit
++import java.util.zip.ZipInputStream
++import kotlin.concurrent.thread
++
++/** Bundled Next server; the old HTTPS origin is virtual, preserving WebView storage. */
++object LocalRuntime {
++    private val ready = CountDownLatch(1)
++    private var started = false
++    private var failure: Throwable? = null
++    private val token = UUID.randomUUID().toString()
++    private var port = 0
++    private val client = OkHttpClient.Builder().followRedirects(false)
++        .followSslRedirects(false).proxy(java.net.Proxy.NO_PROXY)
++        .readTimeout(120, TimeUnit.SECONDS).build()
++    private external fun startNode(directory: String, port: Int, token: String): Int
++
++    @Synchronized fun start(context: Context) {
++        if (started) return
++        started = true
++        val app = context.applicationContext
++        thread(name = "phone-local-prepare") {
++            try {
++                check(BuildConfig.LOCAL_BUNDLE) { "Local bundle missing" }
++                val root = File(app.noBackupFilesDir, "phone-runtime-${BuildConfig.VERSION_CODE}")
++                if (!File(root, ".complete").exists()) {
++                    root.deleteRecursively()
++                    root.mkdirs()
++                    ZipInputStream(app.assets.open("phone-server.zip")).use { zip ->
++                        var entry = zip.nextEntry
++                        var total = 0L
++                        while (entry != null) {
++                            val output = File(root, entry.name)
++                            check(output.canonicalPath.startsWith(root.canonicalPath + File.separator))
++                            if (entry.isDirectory) output.mkdirs() else {
++                                output.parentFile?.mkdirs()
++                                output.outputStream().use { target -> total += zip.copyTo(target) }
++                                check(total <= 1500L * 1024 * 1024) { "Local bundle too large" }
++                            }
++                            zip.closeEntry()
++                            entry = zip.nextEntry
++                        }
++                    }
++                    File(root, ".complete").writeText(BuildConfig.VERSION_NAME)
++                }
++                // Only application runtime files are replaced. Never erase WebView/IndexedDB.
++                app.noBackupFilesDir.listFiles()?.filter {
++                    it.name.startsWith("phone-runtime-") && it != root
++                }?.forEach { it.deleteRecursively() }
++                port = ServerSocket(0, 0, java.net.InetAddress.getByName("127.0.0.1")).use { it.localPort }
++                System.loadLibrary("node")
++                System.loadLibrary("phone-local")
++                thread(name = "phone-local-node") {
++                    try {
++                        val code = startNode(root.absolutePath, port, token)
++                        failure = IllegalStateException("Local server exited ($code)")
++                    } catch (error: Throwable) { failure = error }
++                }
++                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(90)
++                var healthy = false
++                while (!healthy && failure == null && System.nanoTime() < deadline) {
++                    healthy = runCatching {
++                        client.newCall(newRequest("/phone-local-health").build()).execute().use { it.isSuccessful }
++                    }.getOrDefault(false)
++                    if (!healthy) Thread.sleep(200)
++                }
++                check(healthy) { "Local server did not start" }
++            } catch (error: Throwable) { failure = error }
++            finally { ready.countDown() }
++        }
++    }
++
++    fun awaitReady() {
++        check(ready.await(100, TimeUnit.SECONDS)) { "Local startup timed out" }
++        failure?.let { throw IllegalStateException("Local server unavailable", it) }
++    }
++
++    fun owns(url: Uri): Boolean {
++        val origin = Uri.parse(MainActivity.SITE_URL)
++        return url.scheme == origin.scheme && url.host == origin.host && url.port == origin.port
++    }
++
++    fun newRequest(path: String): Request.Builder = Request.Builder()
++        .url("http://127.0.0.1:$port$path")
++        .header("X-Phone-Local-Token", token)
++
++    fun requestFor(url: Uri): Request.Builder {
++        awaitReady()
++        val path = (url.encodedPath?.ifEmpty { "/" } ?: "/") +
++            (url.encodedQuery?.let { "?$it" } ?: "")
++        return newRequest(path).header("Host", Uri.parse(MainActivity.SITE_URL).authority!!)
++            .header("X-Forwarded-Proto", "https")
++    }
++
++    fun route(request: Request): Request {
++        val uri = Uri.parse(request.url.toString())
++        if (!BuildConfig.LOCAL_BUNDLE || !owns(uri)) return request
++        val local = requestFor(uri).build()
++        return request.newBuilder().url(local.url)
++            .header("Host", Uri.parse(MainActivity.SITE_URL).authority!!)
++            .header("X-Phone-Local-Token", token).header("X-Forwarded-Proto", "https").build()
++    }
++
++    fun intercept(request: WebResourceRequest): WebResourceResponse? {
++        if (!BuildConfig.LOCAL_BUNDLE || !owns(request.url)) return null
++        return try {
++            val builder = requestFor(request.url)
++            request.requestHeaders.forEach { (key, value) ->
++                if (key.lowercase() !in setOf("host", "connection", "accept-encoding", "x-phone-local-token")) builder.header(key, value)
++            }
++            CookieManager.getInstance().getCookie(MainActivity.SITE_URL)?.let { builder.header("Cookie", it) }
++            val result = client.newCall(builder.method(request.method, null).build()).execute()
++            result.headers("Set-Cookie").forEach { CookieManager.getInstance().setCookie(MainActivity.SITE_URL, it) }
++            val type = result.header("Content-Type") ?: "application/octet-stream"
++            val headers = result.headers.toMultimap().mapValues { it.value.joinToString(", ") }.toMutableMap()
++            headers.remove("content-encoding"); headers.remove("content-length")
++            WebResourceResponse(type.substringBefore(';'), "UTF-8", result.code,
++                result.message.ifEmpty { "OK" }, headers, result.body?.byteStream())
++        } catch (_: Throwable) {
++            WebResourceResponse("text/plain", "UTF-8", 503, "Local runtime unavailable", emptyMap(),
++                ByteArrayInputStream("本地启动失败。请重开 App；不会回退到在线网页。".toByteArray()))
++        }
++    }
++}
+diff --git a/android-shell/app/src/main/java/app/floatphone/shell/MainActivity.kt b/android-shell/app/src/main/java/app/floatphone/shell/MainActivity.kt
+index cbbbeef..8f1e7cc 100644
+--- a/android-shell/app/src/main/java/app/floatphone/shell/MainActivity.kt
++++ b/android-shell/app/src/main/java/app/floatphone/shell/MainActivity.kt
+@@ -52,6 +52,7 @@ import java.io.FileOutputStream
+ 
+ class MainActivity : AppCompatActivity() {
+     private var localApiBridge: LocalApiBridge? = null
++    private var localHttpBridge: LocalApiBridge? = null
+ 
+     companion object {
+         val SITE_URL: String = BuildConfig.SITE_URL
+@@ -179,6 +180,7 @@ class MainActivity : AppCompatActivity() {
+     @SuppressLint("SetJavaScriptEnabled")
+     override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
++        LocalRuntime.start(this)
+         WindowCompat.setDecorFitsSystemWindows(window, false)
+         enableDisplayCutoutCover()
+         enableHighRefreshRate()
+@@ -208,6 +210,7 @@ class MainActivity : AppCompatActivity() {
+         ViewCompat.requestApplyInsets(rootContainer)
+ 
+         webView.settings.apply {
++            textZoom = 100
+             javaScriptEnabled = true
+             domStorageEnabled = true
+             databaseEnabled = true
+@@ -220,14 +223,31 @@ class MainActivity : AppCompatActivity() {
+         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false)
+ 
+         localApiBridge = LocalApiBridge(webView, SITE_URL).also { it.attach() }
++        localHttpBridge = LocalApiBridge(webView, SITE_URL, bundled = true).also { it.attach() }
++        check(androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT)) {
++            "请先更新 Android System WebView 后再运行本地安装包"
++        }
++        androidx.webkit.WebViewCompat.addDocumentStartJavaScript(webView,
++            assets.open("phone-local-transport.js").bufferedReader().use { it.readText() }, setOf(SITE_URL))
+         webView.addJavascriptInterface(ShellBridge(), "AndroidShell")
+         webView.addJavascriptInterface(PhoneWidgetBridge(), "PhoneWidget")
+         PerceptionBridge.attachStepSensor(this)
+         ShellBus.webView = webView
+ 
++        if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.SERVICE_WORKER_BASIC_USAGE)) {
++            androidx.webkit.ServiceWorkerControllerCompat.getInstance().setServiceWorkerClient(
++                object : androidx.webkit.ServiceWorkerClientCompat() {
++                    override fun shouldInterceptRequest(request: WebResourceRequest): android.webkit.WebResourceResponse? =
++                        LocalRuntime.intercept(request)
++                })
++        }
+         webView.webViewClient = object : WebViewClient() {
++            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): android.webkit.WebResourceResponse? =
++                LocalRuntime.intercept(request)
++
+             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+                 localApiBridge?.cancelAll()
++                localHttpBridge?.cancelAll()
+                 super.onPageStarted(view, url, favicon)
+             }
+             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+diff --git a/android-shell/app/src/main/java/app/floatphone/shell/PushService.kt b/android-shell/app/src/main/java/app/floatphone/shell/PushService.kt
+index 2e49599..9a04f38 100644
+--- a/android-shell/app/src/main/java/app/floatphone/shell/PushService.kt
++++ b/android-shell/app/src/main/java/app/floatphone/shell/PushService.kt
+@@ -50,6 +50,7 @@ class PushService : Service() {
+         private var running = false
+ 
+         fun start(context: Context) {
++            LocalRuntime.start(context)
+             if (running) return
+             val intent = Intent(context, PushService::class.java)
+             if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent)
+@@ -58,6 +59,7 @@ class PushService : Service() {
+     }
+ 
+     private val client = OkHttpClient.Builder()
++        .addInterceptor { chain -> chain.proceed(LocalRuntime.route(chain.request())) }
+         .pingInterval(25, TimeUnit.SECONDS)
+         .readTimeout(0, TimeUnit.MILLISECONDS)
+         .build()
+diff --git a/components/perception/perception-settings.tsx b/components/perception/perception-settings.tsx
+index fe72607..049e2db 100644
+--- a/components/perception/perception-settings.tsx
++++ b/components/perception/perception-settings.tsx
+@@ -36,6 +36,8 @@ import {
+   hasHealthPermission,
+   hasLocationPermission,
+   hasStepPermission,
++  openHealthSettings,
++  openPerceptionSystemSettings,
+   readHealthCapabilities,
+   readLocationCapabilities,
+   requestHealthPermission,
+@@ -119,6 +121,41 @@ export function PerceptionSettings({ onNotice }: { onNotice?: (msg: string) => v
+     setConfig(config);
+   }, []);
+ 
++  const openRequirement = useCallback((row: (typeof rows)[number]) => {
++    let opened = false;
++    let message = "没能打开授权页面，请到手机系统设置里手动开启。";
++    if (row.id === "foregroundApp") {
++      opened = openPerceptionSystemSettings("accessibility");
++      message = "请在无障碍设置中找到小手机并开启服务，返回后会自动刷新状态。";
++    } else if (row.id === "usageStats") {
++      opened = openPerceptionSystemSettings("usage_stats");
++      message = "请在使用情况访问页面允许小手机读取应用使用时长，返回后会自动刷新。";
++    } else if (row.id === "location") {
++      if (!hasLocationPermission()) {
++        requestLocationPermission();
++        opened = true;
++        message = "请在系统弹窗中允许位置权限；若定位开关关闭，再到定位设置开启。";
++      } else {
++        opened = openPerceptionSystemSettings("location");
++        message = "请打开系统定位开关，返回后会自动刷新状态。";
++      }
++    } else if (row.id === "sleep") {
++      const health = readHealthCapabilities();
++      if (health.healthAvailable === true && !hasHealthPermission()) {
++        requestHealthPermission();
++        opened = true;
++        message = "请在 Health Connect 页面允许小手机读取睡眠数据。";
++      } else {
++        opened = openHealthSettings();
++        message = health.healthAvailable === true
++          ? "请检查 Health Connect 的睡眠读取授权和数据来源。"
++          : "请安装或更新 Health Connect，再回来授权睡眠读取。";
++      }
++    }
++    onNotice?.(opened ? message : "没能打开授权页面，请到手机系统设置里手动开启。");
++    window.setTimeout(refresh, 700);
++  }, [onNotice, refresh]);
++
+   const toggleCapability = useCallback((id: PerceptionCapability, on: boolean) => {
+     const current = loadPerceptionConfig();
+     update({ capabilities: { ...current.capabilities, [id]: on } });
+@@ -281,9 +318,15 @@ export function PerceptionSettings({ onNotice }: { onNotice?: (msg: string) => v
+                               {row.nativeSupported ? "App 已支持" : "当前版本不支持"}
+                             </span>
+                             {row.missingRequirement && (
+-                              <span className="per-tag" data-tone="warn">
++                              <button
++                                type="button"
++                                className="per-tag per-tag-action"
++                                data-tone="warn"
++                                aria-label={`点击处理：${row.missingRequirement}`}
++                                onClick={() => openRequirement(row)}
++                              >
+                                 <AlertCircle size={10} strokeWidth={2.4} /> {row.missingRequirement}
+-                              </span>
++                              </button>
+                             )}
+                           </div>
+                         </div>
+diff --git a/components/perception/realtime-extras.tsx b/components/perception/realtime-extras.tsx
+index 72677b4..ebb528b 100644
+--- a/components/perception/realtime-extras.tsx
++++ b/components/perception/realtime-extras.tsx
+@@ -23,17 +23,17 @@ export function RealtimeExtras(){
+  const permission=(key:string)=>key==="notificationCount"?"notifications":key;
+  const supported=!!native()?.getRealtimeSnapshot;
+  return <section className="per-card" style={{padding:16,marginTop:18}}>
+-  <h3 style={{fontWeight:700,marginBottom:10}}>实时感知扩展 · 安卓</h3>
+-  <p style={{fontSize:12,lineHeight:1.7,marginBottom:12}}>与上面的电量、网络、步数及使用统计共用设置，不重复添加。默认全部关闭。开启“随当前聊天提供”后，所选摘要会发给你配置的模型服务；不会因此额外调用模型。网页只能预览，需安装对应 APK。</p>
+-  <div style={{display:"flex",justifyContent:"space-between",gap:12,padding:"12px 0"}}><span>启用扩展感知</span><Toggle checked={!!config.enabled} onChange={v=>update("enabled",v)}/></div>
++  <h3 style={{fontSize:"calc(15px * var(--app-text-scale, 1))",fontWeight:700,lineHeight:1.35,marginBottom:10}}>实时感知扩展 · 安卓</h3>
++  <p style={{fontSize:"calc(12px * var(--app-text-scale, 1))",lineHeight:1.6,marginBottom:12}}>与上面的电量、网络、步数及使用统计共用设置，不重复添加。默认全部关闭。开启“随当前聊天提供”后，所选摘要会发给你配置的模型服务；不会因此额外调用模型。网页只能预览，需安装对应 APK。</p>
++  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,padding:"12px 0",fontSize:"calc(13.5px * var(--app-text-scale, 1))"}}><span>启用扩展感知</span><Toggle checked={!!config.enabled} onChange={v=>update("enabled",v)}/></div>
+   {rows.map(([id,label,desc])=><div key={id} style={{padding:"12px 0",borderTop:"1px solid var(--c-card-border)"}}>
+-    <div role="group" aria-labelledby={`realtime-${id}`} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}><span id={`realtime-${id}`} style={{flex:1}}>{label}<small style={{display:"block",fontSize:12,color:"var(--c-text)",marginTop:4}}>{desc}</small></span><Toggle checked={!!config[id]} onChange={v=>update(id,v)}/></div>
+-    <small>{supported?"安卓壳已接通":"当前版本不支持，需安装新 APK"}</small>
+-    {supported&&config[id]&&["notifications","notificationCount","media","bluetooth","phone","nfc"].includes(id)&&<button type="button" className="ui-btn ui-btn-outline" style={{marginLeft:8,fontSize:12}} onClick={()=>native()?.requestRealtimePermission?.(permission(id))}>{grants[permission(id)]?"检查授权":"去授权"}</button>}
+-    {id==="vibrate"&&supported&&config.vibrate&&<button type="button" className="ui-btn ui-btn-outline" style={{marginLeft:8}} onClick={()=>native()?.requestCharacterVibration?.()}>测试短震动</button>}
++    <div role="group" aria-labelledby={`realtime-${id}`} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,fontSize:"calc(13.5px * var(--app-text-scale, 1))"}}><span id={`realtime-${id}`} style={{flex:1}}>{label}<small style={{display:"block",fontSize:"calc(11px * var(--app-text-scale, 1))",lineHeight:1.5,color:"var(--c-text)",marginTop:4}}>{desc}</small></span><Toggle checked={!!config[id]} onChange={v=>update(id,v)}/></div>
++    <small style={{fontSize:"calc(10.5px * var(--app-text-scale, 1))",lineHeight:1.5}}>{supported?"安卓壳已接通":"当前版本不支持，需安装新 APK"}</small>
++    {supported&&config[id]&&["notifications","notificationCount","media","bluetooth","phone","nfc"].includes(id)&&<button type="button" className="ui-btn ui-btn-outline" style={{marginLeft:8,fontSize:"calc(11px * var(--app-text-scale, 1))"}} onClick={()=>native()?.requestRealtimePermission?.(permission(id))}>{grants[permission(id)]?"检查授权":"去授权"}</button>}
++    {id==="vibrate"&&supported&&config.vibrate&&<button type="button" className="ui-btn ui-btn-outline" style={{marginLeft:8,fontSize:"calc(11px * var(--app-text-scale, 1))"}} onClick={()=>native()?.requestCharacterVibration?.()}>测试短震动</button>}
+   </div>)}
+-  <div style={{display:"flex",justifyContent:"space-between",gap:12,padding:"12px 0"}}><span>随当前前台聊天提供所选摘要</span><Toggle checked={!!config.inject} onChange={v=>update("inject",v)}/></div>
+-  <p style={{fontSize:12,lineHeight:1.7}}>快捷设置磁贴：在 vivo 控制中心的“编辑”里添加本应用。后台通知需在系统中允许通知、后台高耗电与自启动；系统是否保活以本机为准。NFC、步数、睡眠依赖硬件或系统服务，不会伪造数据。</p>
++  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,padding:"12px 0",fontSize:"calc(13.5px * var(--app-text-scale, 1))"}}><span>随当前前台聊天提供所选摘要</span><Toggle checked={!!config.inject} onChange={v=>update("inject",v)}/></div>
++  <p style={{fontSize:"calc(12px * var(--app-text-scale, 1))",lineHeight:1.6}}>快捷设置磁贴：在 vivo 控制中心的“编辑”里添加本应用。后台通知需在系统中允许通知、后台高耗电与自启动；系统是否保活以本机为准。NFC、步数、睡眠依赖硬件或系统服务，不会伪造数据。</p>
+   <button type="button" className="ui-btn ui-btn-outline" onClick={()=>{native()?.clearRealtime?.();refresh()}}>清除临时现实记录</button>{" "}
+   <button type="button" className="ui-btn ui-btn-outline" onClick={refresh}>重新检测</button>{" "}
+   <button type="button" className="ui-btn ui-btn-outline" onClick={()=>native()?.openAppSettings?.()}>打开系统应用设置</button>
+diff --git a/components/pwa-registrar.tsx b/components/pwa-registrar.tsx
+index 7c6747f..81de4ad 100644
+--- a/components/pwa-registrar.tsx
++++ b/components/pwa-registrar.tsx
+@@ -4,6 +4,7 @@ import { useEffect } from "react";
+ 
+ export function PWARegistrar() {
+   useEffect(() => {
++    if (process.env.NEXT_PUBLIC_PHONE_LOCAL === "1") return;
+     if (process.env.NODE_ENV !== "production") return;
+     if (!("serviceWorker" in navigator)) return;
+ 
+diff --git a/lib/perception/bridge.ts b/lib/perception/bridge.ts
+index d5b4f72..d0d5b0f 100644
+--- a/lib/perception/bridge.ts
++++ b/lib/perception/bridge.ts
+@@ -34,6 +34,7 @@ type PerceptionBridgeLike = {
+   refreshHealth?: () => void;
+   getHealthDiagnostics?: () => string;
+   openHealthSettings?: () => boolean;
++  openSystemSettings?: (which: string) => boolean;
+ };
+ 
+ function bridge(): PerceptionBridgeLike | null {
+@@ -342,6 +343,15 @@ export function openHealthSettings(): boolean {
+   }
+ }
+ 
++/** 打开安卓系统授权页；浏览器和旧壳安全降级为 false。 */
++export function openPerceptionSystemSettings(which: "accessibility" | "usage_stats" | "location"): boolean {
++  try {
++    return bridge()?.openSystemSettings?.(which) === true;
++  } catch {
++    return false;
++  }
++}
++
+ /** 读健康桥的内部状态（诊断面板用）。读不到返回 null。 */
+ export function readHealthDiagnostics(): HealthDiagnostics | null {
+   try {
+diff --git a/next.config.mjs b/next.config.mjs
+index 6a7b689..20db8d2 100644
+--- a/next.config.mjs
++++ b/next.config.mjs
+@@ -22,6 +22,7 @@ function resolveDistDir() {
+ /** @type {import('next').NextConfig} */
+ const nextConfig = {
+   typedRoutes: true,
++  ...(process.env.PHONE_LOCAL_BUILD === "1" ? { output: "standalone", images: { unoptimized: true } } : {}),
+   outputFileTracingRoot: projectRoot,
+   distDir: resolveDistDir(),
+   eslint: {
+diff --git a/scripts/build-phone-local.sh b/scripts/build-phone-local.sh
+new file mode 100644
+index 0000000..17e8be3
+--- /dev/null
++++ b/scripts/build-phone-local.sh
+@@ -0,0 +1,12 @@
++#!/usr/bin/env bash
++set -euo pipefail
++export PHONE_LOCAL_BUILD=1 NEXT_PUBLIC_PHONE_LOCAL=1 NEXT_PUBLIC_SELF_HOSTED_MODE=1 NEXT_TELEMETRY_DISABLED=1
++npm ci --no-audit --no-fund
++npm run build
++node scripts/package-phone-server.mjs
++mkdir -p android-shell/app/libnode
++curl -fL --retry 2 https://github.com/nodejs-mobile/nodejs-mobile/releases/download/v18.20.4/nodejs-mobile-v18.20.4-android.zip -o "$RUNNER_TEMP/nodejs-mobile.zip"
++unzip -q "$RUNNER_TEMP/nodejs-mobile.zip" -d android-shell/app/libnode
++# Shipping only arm64 matches the vivo S17; don't package unused device runtimes.
++test -f android-shell/app/libnode/bin/arm64-v8a/libnode.so
++test -f android-shell/app/libnode/include/node/node.h
+diff --git a/scripts/package-phone-server.mjs b/scripts/package-phone-server.mjs
+new file mode 100644
+index 0000000..b118af8
+--- /dev/null
++++ b/scripts/package-phone-server.mjs
+@@ -0,0 +1,19 @@
++import fs from 'node:fs';
++import path from 'node:path';
++import { execFileSync } from 'node:child_process';
++const root = process.cwd();
++const output = path.join(root, '.phone-server');
++fs.rmSync(output, {recursive:true, force:true});
++fs.cpSync('.next/standalone', output, {recursive:true, dereference:true, filter: p =>
++  !/[/\\](?:\.env(?:\.[^/\\]+)?|\.git|android-shell)(?:[/\\]|$)/.test(p)});
++fs.cpSync('.next/static', path.join(output,'.next/static'), {recursive:true});
++fs.cpSync('public', path.join(output,'public'), {recursive:true});
++fs.copyFileSync('scripts/phone-bootstrap.cjs', path.join(output,'phone-bootstrap.cjs'));
++// Fail rather than silently ship an online shell or omit a settings screen.
++for (const p of ['server.js','.next/server/app/index.html','public/icon-192.png']) {
++  if (!fs.existsSync(path.join(output,p))) throw new Error(`Missing local bundle file: ${p}`);
++}
++const assets = 'android-shell/app/src/main/assets';
++fs.mkdirSync(assets,{recursive:true});
++execFileSync('zip',['-qr',path.join(root,assets,'phone-server.zip'),'.'],{cwd:output});
++console.log(`Bundled local server: ${fs.statSync(path.join(assets,'phone-server.zip')).size} bytes`);
+diff --git a/scripts/phone-bootstrap.cjs b/scripts/phone-bootstrap.cjs
+new file mode 100644
+index 0000000..26a5ad1
+--- /dev/null
++++ b/scripts/phone-bootstrap.cjs
+@@ -0,0 +1,24 @@
++// All code and API handlers run on the device. No original-site fallback.
++const { File } = require('node:buffer');
++const { toUSVString } = require('node:util');
++globalThis.File ||= File;
++String.prototype.toWellFormed ||= function () { return toUSVString(this); };
++String.prototype.isWellFormed ||= function () { return toUSVString(this) === String(this); };
++process.env.NEXT_PUBLIC_SELF_HOSTED_MODE = '1';
++process.env.NEXT_TELEMETRY_DISABLED = '1';
++const http = require('node:http');
++const originalEmit = http.Server.prototype.emit;
++http.Server.prototype.emit = function (event, ...args) {
++  if (event === 'request') {
++    const [req, res] = args;
++    if (req.headers['x-phone-local-token'] !== process.env.PHONE_LOCAL_TOKEN) {
++      res.writeHead(403); res.end('Forbidden'); return true;
++    }
++    if (req.url === '/phone-local-health') {
++      res.writeHead(200, {'content-type':'application/json'});
++      res.end(JSON.stringify({local:true})); return true;
++    }
++  }
++  return originalEmit.call(this, event, ...args);
++};
++require('./server.js');
+diff --git a/styles/perception.css b/styles/perception.css
+index d203155..ffb50ba 100644
+--- a/styles/perception.css
++++ b/styles/perception.css
+@@ -289,3 +289,38 @@
+   padding: 4px 16px 8px;
+ }
+ .per-actions .ui-btn { flex: 1; }
++
++
++.per-tag-action {
++  border: 0;
++  font-family: inherit;
++  font-size: calc(10px * var(--app-text-scale, 1));
++  font-weight: 600;
++  line-height: normal;
++  cursor: pointer;
++  text-align: left;
++  -webkit-tap-highlight-color: transparent;
++}
++.per-tag-action:active { filter: brightness(1.12); transform: scale(.98); }
++
++
++/* 手机设置首页的信息卡文字略收小，适配窄屏。 */
++.settings-main-menu .card-label,
++.settings-main-menu .card-featured-label {
++  font-size: calc(13px * var(--app-text-scale, 1));
++}
++.settings-main-menu .card-desc,
++.settings-main-menu .card-featured-desc {
++  font-size: calc(9.5px * var(--app-text-scale, 1));
++}
++
++/* Keep two settings columns inside the phone, regardless of intrinsic text width. */
++.settings-main-menu { min-width: 0; width: 100%; }
++.settings-main-menu .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
++.settings-main-menu .card-card { min-width: 0; width: 100%; padding: 12px; aspect-ratio: auto; min-height: 112px; }
++.settings-main-menu .card-label,
++.settings-main-menu .card-featured-label { font-size: calc(12px * var(--app-text-scale, 1)); }
++.settings-main-menu .card-desc,
++.settings-main-menu .card-featured-desc { font-size: calc(10px * var(--app-text-scale, 1)); overflow-wrap: anywhere; white-space: normal; }
++.settings-main-menu .card-featured { min-width: 0; padding: 14px; }
++html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }

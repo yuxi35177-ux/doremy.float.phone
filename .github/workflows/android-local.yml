@@ -3,6 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [local-apk-20261023]
+    paths: ['android-shell/**', 'components/**', 'lib/**', 'styles/**', 'next.config.mjs', 'scripts/build-phone-local.sh', 'scripts/phone-bootstrap.cjs', 'scripts/package-phone-server.mjs']
 
 permissions:
   contents: write
