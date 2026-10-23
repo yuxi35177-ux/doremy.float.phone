@@ -1,5 +1,8 @@
 "use client";
 
+import { beginPersonaNavigation, cancelPersonaNavigation } from "@/lib/persona-navigation";
+import { PersonaDetailsEditor } from "./persona-details-editor";
+import type { UserIdentity } from "@/components/settings/user-identity";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, Check, X, Plus } from "lucide-react";
@@ -19,13 +22,16 @@ async function preparePersonaSwitch(id: string) {
   };
   clear(config);
   config.globalDefaults.userIdentityId = id;
-  await switchIdentityWorkspace(id, JSON.stringify(config));
+  beginPersonaNavigation(id);
+  try { await switchIdentityWorkspace(id, JSON.stringify(config)); } catch (error) { cancelPersonaNavigation(); throw error; }
 }
 export function PersonaSwitcher() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [name, setName] = useState("");
+  const [editing, setEditing] = useState<UserIdentity | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [notice, setNotice] = useState("");
   const [identities, setIdentities] = useState(loadUserIdentities);
   const closeRef = useRef<HTMLButtonElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -54,29 +60,31 @@ export function PersonaSwitcher() {
     try { await preparePersonaSwitch(id); }
     catch { setError("未能完成存档保存，已留在当前人设。请稍后重试。"); setBusy(false); }
   };
-  const add = async () => {
-    if (!name.trim() || busy) return;
-    setBusy(true); setError("");
+  const saveProfile = async (identity: UserIdentity) => {
+    setBusy(true);
     try {
-      await hydrateKvDb();
-      if (!isKvHydrated()) throw new Error("storage unavailable");
-      const identity = { id: `persona_${crypto.randomUUID()}`, name: name.trim(), bio: "", gender: "", age: "", occupation: "", customSettings: "" };
-      const saved = loadUserIdentities();
-      if (registry?.ownerId === "__default__" && !saved.some(i => i.id === registry.ownerId)) {
-        saved.unshift({ id: registry.ownerId, name: "未设置身份", bio: "", gender: "", age: "", occupation: "", customSettings: "" });
-      }
-      const updated = [...saved, identity];
-      // Await persistence before changing archive; a failed save never switches.
-      await kvSetAsync("ai_phone_user_identities_v1", JSON.stringify(updated));
-      saveUserIdentities(updated);
-      setIdentities(updated);
-      await preparePersonaSwitch(identity.id);
-    } catch { setError("新增人设未完成，当前存档保持原样，请稍后重试。"); setBusy(false); }
+    await hydrateKvDb();
+    if (!isKvHydrated()) throw new Error("storage unavailable");
+    const saved = loadUserIdentities();
+    const exists = saved.some(i => i.id === identity.id);
+    const updated = exists ? saved.map(i => i.id === identity.id ? identity : i) : [...saved, identity];
+    await kvSetAsync("ai_phone_user_identities_v1", JSON.stringify(updated));
+    saveUserIdentities(updated);
+    setIdentities(updated);
+    window.dispatchEvent(new Event("user-identities-updated"));
+    if (creating) await preparePersonaSwitch(identity.id);
+    setEditing(null); setNotice("资料已保存");
+    } finally { setBusy(false); }
+  };
+  const editProfile = (id: string) => {
+    const identity = loadUserIdentities().find(i => i.id === id);
+    setCreating(false); setNotice("");
+    setEditing(identity || { id, name: registry?.ownerName || "未设置身份", bio: "", gender: "", age: "", occupation: "", customSettings: "" });
   };
   const close = () => { if (!busy) { setOpen(false); triggerRef.current?.focus(); } };
   return <>
     <button ref={triggerRef} type="button" className="page-back-btn" aria-label="切换人设" aria-haspopup="dialog" aria-expanded={open}
-      onClick={() => { setIdentities(loadUserIdentities()); setError(""); setOpen(true); }}>
+      onClick={() => { setIdentities(loadUserIdentities()); setError(""); setNotice(""); setEditing(null); setOpen(true); }}>
       <ChevronDown size={24} strokeWidth={1.7} />
     </button>
     {open && createPortal(<div className="modal-overlay" data-ui="modal" onClick={close} style={{ zIndex: 10000 }}>
@@ -85,18 +93,23 @@ export function PersonaSwitcher() {
           <h2 id="persona-title" style={{ fontSize: 20, fontWeight: 700 }}>切换人设</h2>
           <button ref={closeRef} type="button" className="page-back-btn" aria-label="关闭人设切换" disabled={busy} onClick={close}><X size={22} /></button>
         </div>
-        <p style={{ fontSize: 13, lineHeight: 1.7, color: "var(--c-text)", marginBottom: 16 }}>每个人设独立保存聊天、记忆、朋友圈和经历，切回即可恢复。原存档保留在人设“{registry?.ownerName}”下。</p>
+        {editing ? <PersonaDetailsEditor key={editing.id} identity={editing} creating={creating} onSave={saveProfile} onCancel={() => setEditing(null)} /> : <>
+        <p style={{ fontSize: 13, lineHeight: 1.7, color: "var(--c-text)", marginBottom: 16 }}>每个人设独立保存聊天、记忆、朋友圈和经历。切换后保持在此主页。</p>
         <div style={{ display: "grid", gap: 8 }}>
-          {choices.map(i => <button type="button" key={i.id} disabled={busy || i.id === registry?.activeId} onClick={() => void switchTo(i.id)} aria-current={i.id === registry?.activeId ? "true" : undefined}
-            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", textAlign: "left", padding: "14px 16px", borderRadius: 14, border: "1px solid var(--c-card-border)", background: "var(--c-panel)", color: "var(--c-text-title)" }}>
-            <span>{i.name}{i.id === registry?.ownerId ? " · 原存档" : ""}</span>{i.id === registry?.activeId && <Check size={18} aria-label="当前人设" />}
-          </button>)}
+          {choices.map(i => <div key={i.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button type="button" disabled={busy || i.id === registry?.activeId} onClick={() => void switchTo(i.id)} aria-current={i.id === registry?.activeId ? "true" : undefined}
+              style={{ minWidth: 0, flex: 1, display: "flex", alignItems: "center", justifyContent: "space-between", textAlign: "left", padding: "14px 12px", borderRadius: 14, border: "1px solid var(--c-card-border)", background: "var(--c-panel)", color: "var(--c-text-title)" }}>
+              <span>{i.name}{i.id === registry?.ownerId ? " · 原存档" : ""}</span>{i.id === registry?.activeId && <Check size={18} aria-label="当前人设" />}
+            </button>
+            <button type="button" className="ui-btn ui-btn-outline" aria-label={`编辑${i.name}的资料`} disabled={busy} onClick={() => editProfile(i.id)} style={{ padding: "10px 12px", flexShrink: 0 }}>编辑</button>
+          </div>)}
         </div>
-        <form onSubmit={e => { e.preventDefault(); void add(); }} style={{ display: "flex", width: "100%", gap: 8, marginTop: 18 }}>
-          <input aria-label="新人设名称" placeholder="新人设名称" maxLength={50} value={name} disabled={busy} onChange={e => setName(e.target.value)} style={{ minWidth: 0, flex: 1, padding: 12, borderRadius: 12, background: "var(--c-input)", border: "1px solid var(--c-input-border)", color: "var(--c-text-title)" }} />
-          <button type="submit" className="ui-btn ui-btn-primary" disabled={busy || !name.trim()}><Plus size={17} />新增</button>
-        </form>
-        <p style={{ fontSize: 12, color: "var(--c-text)", marginTop: 12 }}>人设详细资料可在设置 → 用户身份中编辑。切换会重新打开小手机。</p>
+        <button type="button" className="ui-btn ui-btn-primary" disabled={busy} style={{ marginTop: 18, width: "100%" }} onClick={() => {
+          setCreating(true); setNotice("");
+          setEditing({ id: `persona_${crypto.randomUUID()}`, name: "", bio: "", gender: "", age: "", occupation: "", customSettings: "" });
+        }}><Plus size={17} />新增人设</button>
+        {notice && <p role="status" style={{ marginTop: 12 }}>{notice}</p>}
+        </>}
         {busy && <p role="status">正在保存并切换…</p>}
         {error && <p role="alert" style={{ color: "#e65e67", marginTop: 12 }}>{error}</p>}
       </section>

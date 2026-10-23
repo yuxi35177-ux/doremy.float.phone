@@ -1,5 +1,6 @@
 "use client";
 
+import { isResumingPersona, completePersonaNavigation } from "@/lib/persona-navigation";
 import { memo, useState, useEffect, useRef } from "react";
 import { ChatMessageList } from "./chat-message-list";
 import { ChatContactsList } from "./chat-contacts-list";
@@ -29,7 +30,8 @@ export type PhoneChatAppProps = {
 };
 
 export const PhoneChatApp = memo(function PhoneChatApp({ onClose, initialSessionId, onSessionChange, sharePayload, onShareDone }: PhoneChatAppProps) {
-    const [activeTab, setActiveTab] = useState<TabKey>("messages");
+    const [activeTab, setActiveTab] = useState<TabKey>(() => isResumingPersona() ? "me" : "messages");
+    useEffect(() => { completePersonaNavigation(); }, []);
     const [activeSession, setActiveSession] = useState<ChatSession | null>(null);
     const [activeMascot, setActiveMascot] = useState(false);
     // Chat app-level custom CSS (affects all chat pages, lower priority than per-session CSS)
