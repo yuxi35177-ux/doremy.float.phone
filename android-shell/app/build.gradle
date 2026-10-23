@@ -23,6 +23,7 @@ android {
     defaultConfig {
         applicationId "app.floatphone.doremy.local"
         minSdk 26
+        externalNativeBuild { cmake { arguments "-DANDROID_STL=c++_shared" } }
         ndk { abiFilters (project.findProperty("phoneAbi") ?: "arm64-v8a") }
         buildConfigField "boolean", "LOCAL_BUNDLE", "true"
         targetSdk 34

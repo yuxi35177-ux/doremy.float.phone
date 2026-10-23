@@ -106,10 +106,10 @@ index 3389b68..8b70391 100644
 +/android-shell/app/src/main/assets/phone-server.zip
 +/android-shell/app/libnode/
 diff --git a/android-shell/app/build.gradle b/android-shell/app/build.gradle
-index c16c262..5f7ff3d 100644
+index c16c262..e0b86ab 100644
 --- a/android-shell/app/build.gradle
 +++ b/android-shell/app/build.gradle
-@@ -15,19 +15,26 @@ android {
+@@ -15,19 +15,27 @@ android {
      // targetSdk 决定运行时的行为约定（如边到边布局），动它会影响已经调好的
      // WebView 全屏布局，那是另一件事，得单独验证，不该顺手带上。
      compileSdk 36
@@ -122,6 +122,7 @@ index c16c262..5f7ff3d 100644
 -        applicationId "app.floatphone.hazel"
 +        applicationId "app.floatphone.hazel.local"
          minSdk 26
++        externalNativeBuild { cmake { arguments "-DANDROID_STL=c++_shared" } }
 +        ndk { abiFilters (project.findProperty("phoneAbi") ?: "arm64-v8a") }
 +        buildConfigField "boolean", "LOCAL_BUNDLE", "true"
          targetSdk 34
@@ -139,7 +140,7 @@ index c16c262..5f7ff3d 100644
          buildConfigField "String", "SITE_URL", groovy.json.JsonOutput.toJson(siteUrl)
      }
  
-@@ -66,6 +73,9 @@ android {
+@@ -66,6 +74,9 @@ android {
  }
  
  dependencies {
@@ -149,7 +150,7 @@ index c16c262..5f7ff3d 100644
      implementation 'androidx.core:core-ktx:1.13.1'
      implementation 'androidx.webkit:webkit:1.12.1'
      implementation 'androidx.appcompat:appcompat:1.7.0'
-@@ -83,4 +93,4 @@ dependencies {
+@@ -83,4 +94,4 @@ dependencies {
      // Health Connect 的读取 API 是挂起函数，而桥要让网页同步读，所以用协程
      // 在后台取、取完写进缓存。显式声明而不是靠传递依赖，避免版本变动就编译失败。
      implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
