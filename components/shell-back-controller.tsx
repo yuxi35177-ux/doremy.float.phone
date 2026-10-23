@@ -19,11 +19,11 @@ function reachable(node: HTMLElement) {
 }
 export function ShellBackController() {
   useEffect(() => {
-    let lastBack = 0;
+    let lastBack = -Infinity;
     const canStart = (x: number, y: number) => {
       let node = document.elementFromPoint(x, y) as HTMLElement | null;
       while (node) {
-        if (node.matches("input,textarea,select,[contenteditable=true],[data-shell-swipe-ignore]")) return false;
+        if (node.matches("input,textarea,select,[contenteditable=true],[role=slider],[data-shell-swipe-ignore],[data-no-swipe-back],[data-horizontal-scroll],.ui-swipe-wrap,canvas,video,iframe")) return false;
         const css = getComputedStyle(node);
         if (node.scrollWidth > node.clientWidth + 4 && /auto|scroll/.test(css.overflowX)) return false;
         node = node.parentElement;
@@ -68,7 +68,91 @@ export function ShellBackController() {
     const target = window as Window & { floatShellBack?: () => boolean; floatShellCanStartBack?: (x: number, y: number) => boolean };
     target.floatShellBack = back;
     target.floatShellCanStartBack = canStart;
-    return () => { delete target.floatShellBack; delete target.floatShellCanStartBack; };
+    // Web/PWA gestures use the same modal/page/desktop handler as the APK.
+    let gesture: { x: number; y: number; at: number; horizontal: boolean } | null = null;
+    let suppressClickUntil = 0;
+    const onStart = (event: TouchEvent) => {
+      gesture = null;
+      // Keep the simulated desktop's own horizontal page switching intact.
+      const app = document.querySelector<HTMLElement>("[data-active-app]");
+      if (!app?.dataset.activeApp || event.touches.length !== 1) return;
+      const touch = event.touches[0];
+      if (!canStart(touch.clientX, touch.clientY)) return;
+      gesture = { x: touch.clientX, y: touch.clientY, at: Date.now(), horizontal: false };
+    };
+    const onMove = (event: TouchEvent) => {
+      if (!gesture) return;
+      if (event.touches.length !== 1) { gesture = null; return; }
+      const dx = Math.abs(event.touches[0].clientX - gesture.x);
+      const dy = Math.abs(event.touches[0].clientY - gesture.y);
+      if (!gesture.horizontal) {
+        if (dy > 12 && dy >= dx) { gesture = null; return; }
+        if (dx > 14 && dx > dy * 1.5) gesture.horizontal = true;
+      }
+      if (gesture.horizontal && event.cancelable) event.preventDefault();
+    };
+    const onEnd = (event: TouchEvent) => {
+      const start = gesture;
+      gesture = null;
+      if (!start || event.touches.length || Date.now() - start.at > 1200) return;
+      const touch = event.changedTouches[0];
+      if (!touch) return;
+      const dx = Math.abs(touch.clientX - start.x);
+      const dy = Math.abs(touch.clientY - start.y);
+      if (dx < 64 || dx < dy * 1.8) return;
+      if (event.cancelable) event.preventDefault();
+      suppressClickUntil = Date.now() + 450;
+      back();
+    };
+    const onCancel = () => { gesture = null; };
+    const onClick = (event: MouseEvent) => {
+      if (event.isTrusted && Date.now() < suppressClickUntil) {
+        event.preventDefault(); event.stopImmediatePropagation();
+      }
+    };
+    const guardKey = "__floatPhoneBackGuard";
+    let guardReady = false;
+    let restoring = false;
+    const addGuard = () => {
+      if (restoring || (navigator.userActivation && !navigator.userActivation.hasBeenActive)) return;
+      if (!window.history.state?.[guardKey]) {
+        window.history.pushState({ ...window.history.state, [guardKey]: true }, "", window.location.href);
+      }
+      guardReady = true;
+    };
+    const onPop = (event: PopStateEvent) => {
+      if (!guardReady) return;
+      if (restoring) { restoring = false; return; }
+      if (event.state?.[guardKey]) return;
+      // Revisit the existing guard, rather than push an unactivated entry which
+      // Android/Chromium can skip on the next edge gesture.
+      restoring = true;
+      window.history.forward();
+      back();
+    };
+    const onNativeBack = (event: Event) => { event.preventDefault(); back(); };
+    addGuard();
+    window.addEventListener("popstate", onPop);
+    window.addEventListener("floatphone:back", onNativeBack);
+    document.addEventListener("pointerup", addGuard, true);
+    document.addEventListener("touchend", addGuard, true);
+    document.addEventListener("touchstart", onStart, { capture: true, passive: true });
+    document.addEventListener("touchmove", onMove, { capture: true, passive: false });
+    document.addEventListener("touchend", onEnd, { capture: true, passive: false });
+    document.addEventListener("touchcancel", onCancel, true);
+    document.addEventListener("click", onClick, true);
+    return () => {
+      delete target.floatShellBack; delete target.floatShellCanStartBack;
+      window.removeEventListener("popstate", onPop);
+      window.removeEventListener("floatphone:back", onNativeBack);
+      document.removeEventListener("pointerup", addGuard, true);
+      document.removeEventListener("touchend", addGuard, true);
+      document.removeEventListener("touchstart", onStart, true);
+      document.removeEventListener("touchmove", onMove, true);
+      document.removeEventListener("touchend", onEnd, true);
+      document.removeEventListener("touchcancel", onCancel, true);
+      document.removeEventListener("click", onClick, true);
+    };
   }, []);
   return null;
 }
