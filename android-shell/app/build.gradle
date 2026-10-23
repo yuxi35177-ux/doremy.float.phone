@@ -21,11 +21,12 @@ android {
     packaging { jniLibs { useLegacyPackaging = true } }
 
     defaultConfig {
-        applicationId "app.floatphone.doremy"
+        applicationId "app.floatphone.doremy.local"
         minSdk 26
-        ndk { abiFilters "arm64-v8a" }
+        ndk { abiFilters (project.findProperty("phoneAbi") ?: "arm64-v8a") }
         buildConfigField "boolean", "LOCAL_BUNDLE", "true"
         targetSdk 34
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // versionCode 必须严格递增，否则 Android 拒绝覆盖安装（表现为「应用未安装」）。
         // 1.0.7：回复条配色逐项自定义；1.0.8：浮窗自检与失败留痕。
         // 1.0.9：修 TransactionTooLargeException（头像经 Intent 撑爆 Binder 上限）。
@@ -72,6 +73,9 @@ android {
 }
 
 dependencies {
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test:core:1.6.1'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
     implementation 'androidx.core:core-ktx:1.13.1'
     implementation 'androidx.webkit:webkit:1.12.1'
     implementation 'androidx.appcompat:appcompat:1.7.0'

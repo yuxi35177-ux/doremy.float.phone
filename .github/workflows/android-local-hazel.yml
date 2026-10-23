@@ -67,8 +67,6 @@ jobs:
           if [ -s "$RUNNER_TEMP/phone.keystore" ]; then
             echo "SHELL_KEYSTORE_FILE=$RUNNER_TEMP/phone.keystore" >> "$GITHUB_ENV"
           fi
-      - name: Require existing signing for a data-preserving update
-        run: test -s "$SHELL_KEYSTORE_FILE"
       - name: Compile and build installable APK
         run: gradle -p android-shell --no-daemon compileDebugKotlin assembleDebug
       - name: Verify and package APK
@@ -81,6 +79,23 @@ jobs:
           "$SIGNER" verify --verbose release-assets/Hazel-vivoS17-1.0.17-local.apk
           cd release-assets
           sha256sum *.apk > SHA256SUMS.txt
+      - name: Allow emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify bundled UI in an offline Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          working-directory: phone
+          script: |
+            adb shell svc wifi disable
+            adb shell svc data disable
+            gradle -p android-shell --no-daemon -PphoneAbi=x86_64 connectedDebugAndroidTest
       - uses: actions/upload-artifact@v4
         with:
           name: Hazel-vivoS17-1.0.17-local
@@ -91,7 +106,7 @@ jobs:
         shell: bash
         run: |
           cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
-          本地运行测试版：页面和 Next API 随 APK 安装，不从 Vercel 下载网页。模型、联网素材和个人云仍需相应网络服务与配置。保留原名称、图标、包名和已配置签名，覆盖安装不清空 WebView 数据。
+          本地运行测试版：页面和 Next API 随 APK 安装，不从 Vercel 下载网页。模型、联网素材和个人云仍需相应网络服务与配置。保留原名称和图标；独立 .local 包名，测试签名，与旧版并存。旧版聊天等存档请导出备份后导入本地版，不要卸载旧版。
           修复设置卡片溢出、系统字体重复放大，打包完整感知设置、权限入口及原生功能。
           首次启动需要解压本地文件。仍需 vivo S17 真机验证，暂不删除线上正式站。公共云账号和服务端共享数据库不能装入 APK；使用项目原有自托管/个人云配置。
           NOTES
