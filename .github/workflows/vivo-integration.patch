@@ -1,5 +1,5 @@
 diff --git a/android-shell/app/build.gradle b/android-shell/app/build.gradle
-index 951ad9a..7d2e9b4 100644
+index 951ad9a..2c12d92 100644
 --- a/android-shell/app/build.gradle
 +++ b/android-shell/app/build.gradle
 @@ -6,7 +6,7 @@ plugins {
@@ -11,6 +11,15 @@ index 951ad9a..7d2e9b4 100644
  
  android {
      namespace 'app.floatphone.shell'
+@@ -17,7 +17,7 @@ android {
+     compileSdk 36
+ 
+     defaultConfig {
+-        applicationId "app.floatphone.shell"
++        applicationId "app.floatphone.doremy"
+         minSdk 26
+         targetSdk 34
+         // versionCode 必须严格递增，否则 Android 拒绝覆盖安装（表现为「应用未安装」）。
 @@ -26,8 +26,8 @@ android {
          // 1.0.10：浮窗改圆角矩形；浮窗左上角显示「待发 N」角标。
          // 1.0.11：截屏与主动查岗（含查岗浮层回复框）；通知栏「直接回复」。
