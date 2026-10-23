@@ -12,9 +12,9 @@ import android.service.notification.NotificationListenerService
  *   · 通过 MediaController 直接下发播放/暂停，比盲发媒体按键可靠得多；
  *   · 读回当前播放状态，确认指令到底有没有生效。
  *
- * 它**不读任何通知内容**：onNotificationPosted / onNotificationRemoved 都刻意不重写，
- * 系统推送来的通知正文在这里从头到尾没有被碰过。存在的唯一目的，是让
- * MediaSessionManager 认这个调用方有资格。
+ * 默认不读取通知内容。用户在「实时感知」里明确开启通知感知后，才读取最多 10 条
+ * 活跃通知的应用名、标题与正文供本机角色参考；关闭后立即清空摘要。
+ * 同一服务也让 MediaSessionManager 允许读取活跃媒体会话。
  */
 class MediaControlListenerService : NotificationListenerService() {
 
@@ -32,24 +32,32 @@ class MediaControlListenerService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         instance = this
+        refreshRealtimeSummaries()
     }
 
     override fun onListenerDisconnected() {
         // 只清自己：断开回调可能来自另一个实例，无脑置 null 会把新连接抹掉
         if (instance === this) instance = null
     }
-    private fun refreshSummaries() {
-        val prefs = getSharedPreferences("realtime_features", Context.MODE_PRIVATE)
-        if (!prefs.getBoolean("enabled", false) || !prefs.getBoolean("notifications", false)) {
-            RealtimeBridge.notificationSummary = org.json.JSONArray(); return
+    fun refreshRealtimeSummaries() {
+        runCatching {
+            val prefs = getSharedPreferences("realtime_features", Context.MODE_PRIVATE)
+            if (!prefs.getBoolean("enabled", false) || !prefs.getBoolean("notifications", false)) {
+                RealtimeBridge.notificationSummary = org.json.JSONArray()
+                return@runCatching
+            }
+            val rows = activeNotifications.orEmpty().asSequence()
+                .filter { it.packageName != packageName }
+                .takeLast(10)
+                .map { sbn ->
+                    org.json.JSONObject().put("app", sbn.packageName)
+                        .put("title", sbn.notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString().orEmpty().take(160))
+                        .put("text", sbn.notification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString().orEmpty().take(240))
+                }.toList()
+            RealtimeBridge.notificationSummary = org.json.JSONArray(rows)
         }
-        RealtimeBridge.notificationSummary = org.json.JSONArray(activeNotifications.filter { it.packageName != packageName }.takeLast(10).map {
-            org.json.JSONObject().put("app", it.packageName)
-                .put("title", it.notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString().orEmpty().take(160))
-                .put("text", it.notification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString().orEmpty().take(240))
-        })
     }
-    override fun onNotificationPosted(sbn: android.service.notification.StatusBarNotification?) { runCatching { refreshSummaries() } }
-    override fun onNotificationRemoved(sbn: android.service.notification.StatusBarNotification?) { runCatching { refreshSummaries() } }
+    override fun onNotificationPosted(sbn: android.service.notification.StatusBarNotification?) { refreshRealtimeSummaries() }
+    override fun onNotificationRemoved(sbn: android.service.notification.StatusBarNotification?) { refreshRealtimeSummaries() }
 
 }

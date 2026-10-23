@@ -42,6 +42,7 @@ class RealtimeBridge(private val activity: Activity) {
         for (key in listOf("screen", "thermal", "storage", "media", "audio", "notifications", "notificationCount", "phone", "volume", "bluetooth", "nfc", "share", "nextAlarm", "vibrate")) editor.putBoolean(key, obj.optBoolean(key, false))
         editor.apply()
         activity.runOnUiThread { pauseNfc(); resumeNfc() }
+        MediaControlListenerService.current()?.refreshRealtimeSummaries()
         if (!enabled("notifications")) notificationSummary = JSONArray()
         if (!enabled("share")) lastShared = ""
         if (!enabled("nfc")) lastNfc = ""
