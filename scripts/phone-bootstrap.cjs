@@ -1,3 +1,4 @@
+require('./phone-runtime-compat.cjs');
 // All code and API handlers run on the device. No original-site fallback.
 const { File } = require('node:buffer');
 const { toUSVString } = require('node:util');
