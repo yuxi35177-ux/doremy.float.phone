@@ -108,6 +108,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
     <application
         android:label="@string/app_name"
         android:icon="@drawable/appicon"
@@ -126,6 +129,11 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
             </intent-filter>
             <!-- Health Connect 的权限说明页入口。Android 14+ 会在这里链一个
                  「为什么需要这些权限」的说明，缺了它系统会拒绝授权请求。 -->
@@ -153,6 +161,9 @@
             android:turnScreenOn="true"
             android:theme="@style/Theme.FloatShell" />
 
+        <service android:name=".PhoneTileService" android:label="@string/app_name" android:icon="@drawable/ic_stat" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
+            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+        </service>
         <receiver
             android:name=".CallActionReceiver"
             android:exported="false" />

@@ -1,3 +1,4 @@
+import { realtimeContext } from "./realtime-device";
 // lib/chat-engine.ts
 
 import { createSseJsonParser } from "./sse-json";
@@ -2029,6 +2030,11 @@ export async function buildChatPromptMessages(
         });
     }
     appendEmptyGenerateGuardMessage(llmMessages, config, historyForPrompt);
+    if (!isOfflineMode) {
+        const realtime = realtimeContext();
+        if (realtime) llmMessages.push({ role: "system", content: realtime });
+    }
+
 
     // ── 感知状态注入（默认关）──
     // 放在所有系统消息之后、历史之前：让它是「最后一眼背景」，

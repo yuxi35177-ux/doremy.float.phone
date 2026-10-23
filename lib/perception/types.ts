@@ -154,7 +154,7 @@ export type PerceptionConfig = {
 };
 
 export const PERCEPTION_DEFAULTS: PerceptionConfig = {
-  enabled: true,
+  enabled: false,
   capabilities: {},
   sampleSeconds: 60,
   batteryStepPercent: 5,

@@ -1,3 +1,4 @@
+import type { CheckInOutcome } from "./types";
 "use client";
 
 // 查岗引擎：决定「该不该查」→ 请原生弹浮层 → 按用户的选择推进。
@@ -400,3 +401,4 @@ export async function pollDueCheckIns(): Promise<number> {
   }
   return fired;
 }
+

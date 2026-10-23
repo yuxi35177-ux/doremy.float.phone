@@ -38,4 +38,18 @@ class MediaControlListenerService : NotificationListenerService() {
         // 只清自己：断开回调可能来自另一个实例，无脑置 null 会把新连接抹掉
         if (instance === this) instance = null
     }
+    private fun refreshSummaries() {
+        val prefs = getSharedPreferences("realtime_features", Context.MODE_PRIVATE)
+        if (!prefs.getBoolean("enabled", false) || !prefs.getBoolean("notifications", false)) {
+            RealtimeBridge.notificationSummary = org.json.JSONArray(); return
+        }
+        RealtimeBridge.notificationSummary = org.json.JSONArray(activeNotifications.filter { it.packageName != packageName }.takeLast(10).map {
+            org.json.JSONObject().put("app", it.packageName)
+                .put("title", it.notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString().orEmpty().take(160))
+                .put("text", it.notification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString().orEmpty().take(240))
+        })
+    }
+    override fun onNotificationPosted(sbn: android.service.notification.StatusBarNotification?) { runCatching { refreshSummaries() } }
+    override fun onNotificationRemoved(sbn: android.service.notification.StatusBarNotification?) { runCatching { refreshSummaries() } }
+
 }

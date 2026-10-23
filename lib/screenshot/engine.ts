@@ -195,3 +195,12 @@ function notifyScreenshot(record: ScreenshotRecord): void {
     null,
   );
 }
+
+/** Remove exactly one record and its image, leaving other history intact. */
+export async function deleteScreenshotRecord(id: string): Promise<void> {
+  const records = loadScreenshotRecords();
+  const item = records.find(record => record.id === id);
+  if (!item) return;
+  await deleteMediaRef(item.ref);
+  saveScreenshotRecords(records.filter(record => record.id !== id));
+}

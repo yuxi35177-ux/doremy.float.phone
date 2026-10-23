@@ -43,6 +43,8 @@ export const DEVICE_ACTION_LABEL: Record<DeviceActionId, string> = {
   torch: "手电筒",
   volume: "音量",
   brightness: "屏幕亮度",
+  brightnessAuto: "自动亮度",
+  mediaSessionGranted: "媒体会话授权",
   brightnessGranted: "屏幕亮度授权",
   dnd: "勿扰模式",
   dndGranted: "勿扰模式授权",
@@ -60,6 +62,8 @@ export const DEVICE_ACTION_LABEL: Record<DeviceActionId, string> = {
  * 答不上场景的动作就不该接。
  */
 export const DEVICE_ACTION_DESC: Record<DeviceActionId, string> = {
+  brightnessAuto: "是否自动调节亮度。",
+  mediaSessionGranted: "媒体控制的通知使用权。",
   torch: "开关手电筒。场景：起夜、找东西时角色顺手替你开一下。",
   volume: "调节媒体/铃声/闹钟/通知的音量。场景：替你调小外放声音。注意它改的是系统音量，不会自己变回来。",
   brightness: "调节屏幕亮度。场景：夜里替你调暗。需要「修改系统设置」权限，且改动是持久的、不会自动恢复。",

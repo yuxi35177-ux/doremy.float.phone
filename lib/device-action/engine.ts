@@ -107,6 +107,7 @@ export function runDeviceAction(args: Record<string, unknown>): DeviceActionOutc
 
   const action = String(args.action ?? "").trim();
   if (!action) return { ok: false, reason: "缺少 action 参数" };
+  if (action !== "vibrate" && (typeof window === "undefined" || !window.confirm(`角色请求操作手机：${action}。是否允许这一次？`))) return { ok: false, reason: "用户未确认这次设备操作" };
 
   /**
    * 把这次动作记进感知流水。
@@ -155,6 +156,12 @@ export function runDeviceAction(args: Record<string, unknown>): DeviceActionOutc
   // 注意：下面的 per-action 检查用的是 isActionEnabled（显式 true 才算开），
   // 所以默认状态下每个动作都会被拦下——这是刻意的，不是 bug。
   switch (action) {
+    case "vibrate": {
+      const bridge = (window as unknown as { AndroidShell?: { requestCharacterVibration?:()=>boolean } }).AndroidShell;
+      const requested = bridge?.requestCharacterVibration?.() === true;
+      return requested ? { ok: true, action: "vibrate", message: "已弹出短震动确认，只有用户点允许才会执行" } : { ok: false, reason: "请先在实时感知扩展中开启角色震动" };
+    }
+
     case "torch": {
       const blocked = allowed("torch");
       if (blocked) return blocked;

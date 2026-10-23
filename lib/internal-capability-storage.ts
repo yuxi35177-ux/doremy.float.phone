@@ -1657,7 +1657,7 @@ const DEVICE_ACTION_PARAMETER_SCHEMA = JSON.stringify({
     properties: {
         action: {
             type: "string",
-            description: "要做什么：torch=手电筒，volume=音量，brightness=屏幕亮度，dnd=勿扰模式，openApp=打开应用，alarm=设闹钟，timer=设倒计时，media=音乐播放控制，openUrl=打开网页。",
+            description: "要做什么：vibrate=请求一次短震动（需实时扩展中开启并点确认），torch=手电筒，volume=音量，brightness=屏幕亮度，dnd=勿扰模式，openApp=打开应用，alarm=设闹钟，timer=设倒计时，media=音乐播放控制，openUrl=打开网页。",
         },
         on: {
             type: "boolean",
@@ -1761,6 +1761,7 @@ const DEVICE_ACTION_USAGE_GUIDE = [
 const PERCEPTION_READ_PARAMETER_SCHEMA = JSON.stringify({
     type: "object",
     properties: {
+        phoneNumber: { type: "string", description: "可选，仅在用户要求识别一个已知来电或消息号码时查询对应联系人姓名，不读取通讯录列表。" },
         focus: {
             type: "string",
             description: "可选，只看某一类：battery=电量与充电，network=网络，app=正在用什么应用，steps=步数，usage=今天各应用用了多久，location=大致位置，sleep=最近一觉。不填返回全部。",

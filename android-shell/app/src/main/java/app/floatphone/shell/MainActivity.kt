@@ -71,6 +71,7 @@ class MainActivity : AppCompatActivity() {
     private var imeInsetPx: Int = 0
     private var webNotifId = 500
 
+    private val realtime by lazy { RealtimeBridge(this) }
     private val perception by lazy { PerceptionBridge(this) }
     private val deviceAction by lazy { DeviceActionBridge(this) }
     private val calendar by lazy { CalendarBridge(this) }
@@ -233,7 +234,8 @@ class MainActivity : AppCompatActivity() {
                 val url = request.url
                 val scheme = url.scheme ?: return false
                 if (scheme == "http" || scheme == "https") {
-                    if (url.host == Uri.parse(SITE_URL).host) return false
+                    val allowed = Uri.parse(SITE_URL)
+                    if (url.scheme == allowed.scheme && url.host == allowed.host && url.port == allowed.port) return false
                     return runCatching {
                         startActivity(Intent(Intent.ACTION_VIEW, url)); true
                     }.getOrDefault(true)
@@ -309,6 +311,7 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
+        realtime.consumeIntent(intent)
         webView.loadUrl(consumeOpenUrl(intent) ?: SITE_URL)
         ensurePushService()
     }
@@ -431,7 +434,11 @@ class MainActivity : AppCompatActivity() {
         webView.evaluateJavascript(js, null)
     }
 
+    override fun onResume() { super.onResume(); realtime.resumeNfc() }
+    override fun onPause() { realtime.pauseNfc(); super.onPause() }
+
     override fun onNewIntent(intent: Intent) {
+        realtime.consumeIntent(intent)
         super.onNewIntent(intent)
         setIntent(intent)
         val target = consumeOpenUrl(intent) ?: return
@@ -549,6 +556,23 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun getStatusBarHeightPx(): Int = statusBarHeightCssPx
+
+        @JavascriptInterface
+        fun configureRealtime(json: String): Boolean = realtime.configure(json)
+        @JavascriptInterface fun getRealtimeSnapshot(): String = realtime.snapshot()
+        @JavascriptInterface fun requestRealtimePermission(key: String) { realtime.permission(key) }
+        @JavascriptInterface fun clearRealtime() { realtime.clear() }
+        @JavascriptInterface fun requestCharacterVibration(): Boolean = realtime.vibrate()
+        @JavascriptInterface fun requestContactsPermission() { runOnUiThread { androidx.core.app.ActivityCompat.requestPermissions(this@MainActivity, arrayOf(Manifest.permission.READ_CONTACTS), 410) } }
+        @JavascriptInterface fun lookupContact(number: String): String {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) return ""
+            val cleaned = number.filter { it.isDigit() || it == '+' }.take(30)
+            if (cleaned.length < 3) return ""
+            return runCatching {
+                val uri = Uri.withAppendedPath(android.provider.ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(cleaned))
+                contentResolver.query(uri, arrayOf(android.provider.ContactsContract.PhoneLookup.DISPLAY_NAME), null, null, null)?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0).take(80) else "" } ?: ""
+            }.getOrDefault("")
+        }
 
         @JavascriptInterface
         fun getPerceptionSnapshot(): String = perception.snapshotJson()

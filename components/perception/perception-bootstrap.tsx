@@ -9,12 +9,15 @@
 // 放在 desktop-shell（主界面）里，壳内全程驻留；普通浏览器里
 // startPerception() 会因为 hasPerceptionBridge() 为 false 而空转，无副作用。
 
+import { kvGet } from "@/lib/kv-db";
+import { REALTIME_KEY, realtimeNative } from "@/lib/realtime-device";
 import { useEffect } from "react";
 
 import { startPerception, stopPerception } from "@/lib/perception";
 
 export function PerceptionBootstrap() {
   useEffect(() => {
+    realtimeNative()?.configureRealtime?.(kvGet(REALTIME_KEY) || "{}");
     void startPerception();
     return () => stopPerception();
   }, []);

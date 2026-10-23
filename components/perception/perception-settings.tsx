@@ -1,4 +1,5 @@
 "use client";
+import { RealtimeExtras } from "./realtime-extras";
 
 // 感知设置面板：能力开关 + 阈值调节 + 诊断。
 //
@@ -123,6 +124,8 @@ export function PerceptionSettings({ onNotice }: { onNotice?: (msg: string) => v
     update({ capabilities: { ...current.capabilities, [id]: on } });
     // 开启一个原生还不支持的能力时明确说一句，避免用户开了却发现永远没反应
     if (on) {
+      if (id === "contacts") (window as unknown as { AndroidShell?: { requestContactsPermission?:()=>void } }).AndroidShell?.requestContactsPermission?.();
+
       const row = buildCapabilityRows().find(item => item.id === id);
       if (row && !row.nativeSupported) {
         onNotice?.(`当前 App 版本还不支持「${row.label}」，开启后也不会产生信号`);
@@ -809,6 +812,7 @@ export function PerceptionSettings({ onNotice }: { onNotice?: (msg: string) => v
             </>
           )}
         </div>
+      <RealtimeExtras />
     </div>
   );
 }
