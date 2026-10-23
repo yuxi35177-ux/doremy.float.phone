@@ -84,7 +84,16 @@ jobs:
           script: |
             adb shell svc wifi disable
             adb shell svc data disable
-            gradle -p android-shell --no-daemon -PphoneAbi=x86_64 connectedDebugAndroidTest || { adb logcat -d > android-emulator.log; exit 1; }
+            gradle -p android-shell --no-daemon -PphoneAbi=x86_64 connectedDebugAndroidTest || { adb logcat -d > android-emulator.log; adb logcat -b crash -d; adb logcat -d -s PhoneNode:I AndroidRuntime:E; exit 1; }
+      - name: Save test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Doremy-local-diagnostics
+          path: |
+            android-emulator.log
+            android-shell/app/build/outputs/androidTest-results/**
+            android-shell/app/build/reports/androidTests/**
       - uses: actions/upload-artifact@v4
         with:
           name: Doremy-vivoS17-1.0.17-local
