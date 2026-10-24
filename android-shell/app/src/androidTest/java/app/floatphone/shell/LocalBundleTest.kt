@@ -31,7 +31,7 @@ class LocalBundleTest {
             if (js(scenario, source) == "true") return
             Thread.sleep(400)
         }
-        throw AssertionError("Local UI failed: " + js(scenario,"document.body?.innerText?.slice(0,500)"))
+        throw AssertionError("Local UI failed (" + source + "): " + js(scenario,"document.body?.innerText?.slice(0,500)"))
     }
     @Test fun opensSettingsAndPerceptionWithoutWebsite() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
@@ -50,14 +50,17 @@ class LocalBundleTest {
             until(scenario, "!!document.querySelector('[aria-label=\"现实功能逐项测试\"] [role=status]')")
             assertTrue(js(scenario, "document.querySelector('[aria-label=\"现实功能逐项测试\"] [role=status]').textContent.includes('percent')") == "true")
             assertTrue(js(scenario, "typeof AndroidShell.getPerceptionSnapshot==='function' && typeof AndroidShell.getRealtimeSnapshot==='function'") == "true")
-            js(scenario, "window.dispatchEvent(new Event('float-navigation-back',{cancelable:true}))")
+            js(scenario, "Array.from(document.querySelectorAll('button')).filter(e=>e.textContent?.trim()==='我知道了').forEach(e=>e.click())")
+            repeat(4) { js(scenario, "window.floatShellBack?.()"); Thread.sleep(450) }
             until(scenario, "!!document.querySelector('[data-flip-id=\"icon:square_forum\"]')")
             js(scenario, "document.querySelector('[data-flip-id=\"icon:square_forum\"]').click()")
             until(scenario, "!!document.querySelector('[data-testid=square-forum-frame]')?.contentDocument?.querySelector('#forum-screen.is-open')")
             js(scenario, "document.querySelector('[data-testid=square-forum-frame]').contentDocument.querySelector('#forum-sector-settings-btn').click()")
             until(scenario, "!!document.querySelector('[data-testid=square-forum-frame]').contentDocument.querySelector('#forum-generate-count')")
             assertTrue(js(scenario, "document.querySelector('[data-testid=square-forum-frame]').contentDocument.body.innerText.includes('可删除、加精华的身份组')") == "true")
-            js(scenario, "window.dispatchEvent(new Event('float-navigation-back',{cancelable:true}))")
+            Thread.sleep(450)
+            js(scenario, "window.floatShellBack?.()")
+            until(scenario, "document.querySelector('[data-testid=square-forum-frame]').contentDocument.querySelector('#forum-sector-sheet').hidden")
             assertTrue(js(scenario, "!!document.querySelector('[data-testid=square-forum-frame]')") == "true")
         }
     }
