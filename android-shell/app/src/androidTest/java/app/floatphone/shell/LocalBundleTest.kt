@@ -54,4 +54,4 @@ class LocalBundleTest {
     }
 }
 
-// Offline device tests run with Vulkan disabled for cloud emulator stability.
+// Keep compiled packages available if cloud device verification is interrupted.

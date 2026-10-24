@@ -70,6 +70,10 @@ jobs:
           "$SIGNER" verify --verbose release-assets/Doremy-vivoS17-1.0.18-local.apk
           cd release-assets
           sha256sum *.apk > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Doremy-vivoS17-1.0.18-local
+          path: release-assets/*
       - name: Allow emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -98,10 +102,6 @@ jobs:
             android-emulator.log
             android-shell/app/build/outputs/androidTest-results/**
             android-shell/app/build/reports/androidTests/**
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Doremy-vivoS17-1.0.18-local
-          path: release-assets/*
       - name: Publish APK download
         env:
           GH_TOKEN: ${{ github.token }}
