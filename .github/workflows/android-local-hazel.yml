@@ -42,6 +42,7 @@ jobs:
         run: |
           cp -r ../build-data/public/square-forum public/square-forum
           cp ../build-data/components/square-forum-app.tsx components/square-forum-app.tsx
+          cp ../build-data/lib/local-api-fetch.ts lib/local-api-fetch.ts
           python ../build-data/scripts/apply-forum-shell.py
       - uses: actions/setup-node@v4
         with:
