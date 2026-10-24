@@ -1,6 +1,7 @@
 import type { CustomAppIconId } from "@/lib/custom-app-types";
 
 export type IconId =
+  | "square_forum"
   | "chat"
   | "diary"
   | "music"
@@ -69,11 +70,12 @@ export const PAGE_2_DEFAULT: IconId[] = [
 ];
 
 // 第三页默认图标：右半边 2×2 排布（左半边留给日历组件），位置见 createDefaultDesktopIconLayout
-export const PAGE_3_DEFAULT: IconId[] = ["worldbuilder", "qa", "resource_hub", "realitybridge", "mixology"];
+export const PAGE_3_DEFAULT: IconId[] = ["square_forum", "worldbuilder", "qa", "resource_hub", "realitybridge", "mixology"];
 
 export const DOCK_DEFAULT: IconId[] = ["settings", "theme", "resources", "characters"];
 
 export const ICONS: Record<IconId, IconMeta> = {
+  square_forum: {id:"square_forum",label:"论坛",tone:"var(--c-icon-teal)",placeholder:false},
   chat: { id: "chat", label: "\u804a\u5929", tone: "var(--c-icon-green)", placeholder: false },
   diary: { id: "diary", label: "手记", tone: "var(--c-icon-violet)", placeholder: false },
   music: { id: "music", label: "\u97F3\u4E50", tone: "var(--c-icon-coral)", placeholder: false },

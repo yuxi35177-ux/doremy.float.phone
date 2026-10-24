@@ -43,6 +43,7 @@ import { ShoppingApp } from "@/components/shopping/shopping-app";
 import { MixologyApp } from "@/components/mixology/mixology-app";
 import InterviewMagazineApp from "@/components/interview/interview-magazine-app";
 import { CoCreateApp } from "@/components/cocreate/cocreate-app";
+import { SquareForumApp } from "./square-forum-app";
 import { AppMarketApp } from "@/components/app-market/app-market-app";
 import { CustomAppRunner } from "@/components/app-market/custom-app-runner";
 import { CustomAppForegroundBoundary } from "@/components/app-market/custom-app-failure";
@@ -1307,6 +1308,8 @@ export function DesktopShell({ initialThemeProfile, initialThemeAssets }: Deskto
   const [showDesktopCustomizer, setShowDesktopCustomizer] = useState(false);
   useEffect(() => {
     const back = (event: Event) => {
+      if (event.defaultPrevented) return;
+      if (activeApp === "square_forum" && (window as unknown as {FloatForumBack?:()=>boolean}).FloatForumBack?.()) {event.preventDefault();return;}
       if (showDesktopCustomizer) setShowDesktopCustomizer(false);
       else if (openFolderId) setOpenFolderId(null);
       else if (editMode) setEditMode(false);
@@ -4328,6 +4331,8 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
     if (activeApp === "mixology") {
       return <MixologyApp onClose={() => setActiveApp(null)} />;
     }
+
+    if (activeApp === "square_forum") return <SquareForumApp onClose={() => setActiveApp(null)} onOpenSession={id => {setChatInitSessionId(id);setActiveApp("chat");}} />;
 
     if (activeApp === "appmarket") {
       return (

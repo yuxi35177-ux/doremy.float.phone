@@ -38,6 +38,11 @@ jobs:
           cp ../build-data/components/real-device-tests.tsx components/real-device-tests.tsx
           cp ../build-data/components/ui/page-shell.tsx components/ui/page-shell.tsx
           cp ../build-data/android-shell/app/src/androidTest/java/app/floatphone/shell/LocalBundleTest.kt android-shell/app/src/androidTest/java/app/floatphone/shell/LocalBundleTest.kt
+      - name: Add shared forum app
+        run: |
+          cp -r ../build-data/public/square-forum public/square-forum
+          cp ../build-data/components/square-forum-app.tsx components/square-forum-app.tsx
+          python ../build-data/scripts/apply-forum-shell.py
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -81,9 +86,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release-assets
-          cp android-shell/app/build/outputs/apk/debug/app-debug.apk release-assets/Hazel-vivoS17-1.0.18-local.apk
+          cp android-shell/app/build/outputs/apk/debug/app-debug.apk release-assets/Hazel-vivoS17-1.0.19-local.apk
           SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
-          "$SIGNER" verify --verbose release-assets/Hazel-vivoS17-1.0.18-local.apk
+          "$SIGNER" verify --verbose release-assets/Hazel-vivoS17-1.0.19-local.apk
           cd release-assets
           sha256sum *.apk > SHA256SUMS.txt
       - name: Allow emulator acceleration
@@ -116,19 +121,8 @@ jobs:
             phone/android-shell/app/build/reports/androidTests/**
       - uses: actions/upload-artifact@v4
         with:
-          name: Hazel-vivoS17-1.0.18-local
+          name: Hazel-vivoS17-1.0.19-local
           path: phone/release-assets/*
-      - name: Publish APK download
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
-          本地运行测试版：页面和 Next API 随 APK 安装，不从 Vercel 下载网页。模型、联网素材和个人云仍需相应网络服务与配置。保留原名称和图标；独立 .local.v2 包名，与旧版并存；新增现实功能逐项测试及加密签名备份。旧版聊天等存档请导出备份后导入本地版，不要卸载旧版。
-          修复设置卡片溢出、系统字体重复放大，打包完整感知设置、权限入口及原生功能。
-          首次启动需要解压本地文件。仍需 vivo S17 真机验证，暂不删除线上正式站。公共云账号和服务端共享数据库不能装入 APK；使用项目原有自托管/个人云配置。
-          NOTES
-          gh release create "hazel-local-apk-v1.0.18-${GITHUB_RUN_NUMBER}" release-assets/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Hazel 本地 APK 1.0.18 测试版' --notes-file "$RUNNER_TEMP/notes.md" --prerelease
       - name: Remove temporary signing files
         if: always()
         run: rm -f "$RUNNER_TEMP/phone.keystore" "$RUNNER_TEMP/phone.keystore.enc"

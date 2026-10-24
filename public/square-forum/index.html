@@ -1,0 +1,352 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="forum.css"><link rel="stylesheet" href="icons.css"><link rel="stylesheet" href="host.css"></head><body><div id="phone"><section aria-hidden="true" class="forum-screen" id="forum-screen">
+<div class="forum-app">
+<header class="forum-wx-wechat-topbar">
+<div class="forum-wx-wechat-topbar-inner">
+<button aria-label="返回桌面" class="forum-wx-wechat-back forum-moments-back" id="forum-close" type="button">
+<i aria-hidden="true" class="ph ph-caret-left"></i>
+</button>
+<div class="forum-wx-wechat-brand">
+<span class="forum-wx-wechat-kicker" id="forum-topbar-kicker">SQUARE FEED</span>
+<span class="forum-wx-wechat-title" id="forum-topbar-title">Square.</span>
+</div>
+<div class="forum-wx-wechat-actions">
+<button aria-label="刷新" class="forum-wx-wechat-ico forum-wx-wechat-ico--light" id="forum-refresh-btn" title="AI 刷帖" type="button">
+<i aria-hidden="true" class="ph ph-arrows-clockwise"></i>
+</button>
+<button aria-label="板块与世界书" class="forum-wx-wechat-ico forum-wx-wechat-ico--light" hidden="" id="forum-sector-settings-btn" title="板块与世界书" type="button">
+<i aria-hidden="true" class="ph ph-globe"></i>
+</button>
+<button aria-label="发帖" class="forum-wx-wechat-ico forum-wx-wechat-ico--dark" id="forum-compose-top" title="发帖" type="button">
+<i aria-hidden="true" class="ph ph-plus"></i>
+</button>
+</div>
+</div>
+</header>
+<div class="forum-pane" id="forum-panel-feed">
+<div class="forum-pane-scroll forum-feed-scroll">
+<div class="forum-sector-row" id="forum-sector-row">
+<div aria-label="论坛板块" class="forum-sector-chips" id="forum-sector-chips" role="tablist"></div>
+</div>
+<div class="forum-sector-wb-banner" hidden="" id="forum-sector-wb-banner">
+<i aria-hidden="true" class="ph ph-book-open"></i>
+<span id="forum-sector-wb-banner-text"></span>
+</div>
+<div aria-label="广场帖子" class="forum-feed-list" id="forum-feed" role="feed"></div>
+<div class="forum-wx-empty forum-feed-empty" hidden="" id="forum-feed-empty">
+<p class="forum-wx-empty-title">广场还没有帖子</p>
+<p class="forum-wx-empty-desc">点右上角 + 发一条，或刷新试试 AI 刷帖</p>
+</div>
+</div>
+</div>
+<div class="forum-pane" hidden="" id="forum-panel-messages">
+<div class="forum-pane-scroll forum-wx-scroll forum-wx-list-scroll">
+<div class="forum-wx-chat-list" id="forum-msg-list" role="list"></div>
+<div class="forum-wx-notif-block" hidden="" id="forum-msg-notifs-wrap">
+<p class="forum-wx-section-label">互动通知</p>
+<div class="forum-wx-notif-list" id="forum-msg-notifs"></div>
+</div>
+<div class="forum-wx-empty" hidden="" id="forum-msg-empty">
+<p class="forum-wx-empty-title">暂无私信</p>
+<p class="forum-wx-empty-desc">在广场点作者头像发起对话</p>
+</div>
+</div>
+</div>
+<div class="forum-pane" hidden="" id="forum-panel-profile">
+<div class="forum-pane-scroll forum-profile-scroll">
+<div class="forum-profile-head-card">
+<div class="forum-profile-head-row">
+<span aria-hidden="true" class="forum-profile-av" id="forum-profile-av">你</span>
+<div class="forum-profile-meta">
+<div class="forum-profile-name-wrap">
+<button aria-label="编辑昵称" class="forum-profile-name-btn" id="forum-profile-name-btn" type="button">
+<span class="forum-profile-name-text" id="forum-profile-display-name">论坛用户</span>
+<i aria-hidden="true" class="ph ph-pencil-simple"></i>
+</button>
+<input autocomplete="nickname" class="forum-profile-name-edit" hidden="" id="forum-profile-name" maxlength="24" placeholder="输入昵称" type="text"/>
+</div>
+<div class="forum-profile-id-wrap">
+<button aria-label="编辑论坛 ID" class="forum-profile-id-btn" id="forum-profile-id-btn" type="button">
+<span class="forum-profile-id-text" id="forum-profile-id-text">wx_forum</span>
+<i aria-hidden="true" class="ph ph-pencil-simple"></i>
+</button>
+<input autocomplete="off" class="forum-profile-id-edit" hidden="" id="forum-profile-id-input" maxlength="24" placeholder="wx_昵称" type="text"/>
+</div>
+</div>
+</div>
+<div class="forum-profile-stats">
+<div><strong id="forum-profile-posts">0</strong><span>帖子</span></div>
+<div><strong id="forum-profile-likes">0</strong><span>获赞</span></div>
+<div><strong id="forum-profile-cmts">0</strong><span>评论</span></div>
+</div>
+</div>
+<section aria-labelledby="forum-profile-posts-title" class="forum-profile-section">
+<h3 class="forum-profile-section-title" id="forum-profile-posts-title">我的帖子</h3>
+<div class="forum-profile-posts-list" id="forum-profile-posts-list" role="list"></div>
+<div class="forum-profile-posts-empty" hidden="" id="forum-profile-posts-empty">
+<i aria-hidden="true" class="ph ph-quill"></i>
+<p>还没有发过帖</p>
+<span>去广场点右上角 + 发第一条</span>
+</div>
+</section>
+</div>
+</div>
+<nav aria-label="论坛导航" class="chat-list-dock forum-dock" role="tablist">
+<div class="chat-list-dock-tabs">
+<button aria-selected="true" class="chat-list-dock-tab is-active" data-forum-tab="square" role="tab" type="button">
+<i aria-hidden="true" class="ph-fill ph-house"></i><span class="chat-list-dock-label">广场</span>
+</button>
+<button aria-selected="false" class="chat-list-dock-tab" data-forum-tab="messages" role="tab" type="button">
+<span class="forum-dock-ico-wrap"><i aria-hidden="true" class="ph ph-chat-circle-dots"></i><span class="forum-dock-dot" hidden="" id="forum-msg-dot"></span></span>
+<span class="chat-list-dock-label">私信</span>
+</button>
+<button aria-selected="false" class="chat-list-dock-tab" data-forum-tab="profile" role="tab" type="button">
+<i aria-hidden="true" class="ph ph-user"></i><span class="chat-list-dock-label">我</span>
+</button>
+</div>
+</nav>
+</div>
+<div class="forum-dm" hidden="" id="forum-dm">
+<header class="forum-wx-chat-header">
+<button aria-label="返回" class="forum-wx-chat-header-back" id="forum-dm-back" type="button">
+<i aria-hidden="true" class="ph ph-caret-left"></i>
+</button>
+<button class="forum-wx-chat-header-peer" id="forum-dm-peer" type="button">
+<span aria-hidden="true" class="forum-wx-chat-header-av" id="forum-dm-peer-av">?</span>
+<span class="forum-wx-chat-header-peer-text">
+<span class="forum-wx-chat-header-name" id="forum-dm-peer-name">网友</span>
+<span class="forum-wx-chat-header-status">在线</span>
+</span>
+</button>
+<span aria-hidden="true" class="forum-wx-chat-header-spacer"></span>
+</header>
+<div class="forum-dm-scroll" id="forum-dm-scroll"></div>
+<footer class="forum-dm-compose">
+<label class="visually-hidden" for="forum-dm-input">私信内容</label>
+<div class="forum-dm-input-wrap">
+<input autocomplete="off" class="forum-dm-input" enterkeyhint="send" id="forum-dm-input" maxlength="500" placeholder="说点什么…" type="text"/>
+</div>
+<button aria-label="发送" class="forum-dm-send" disabled="" id="forum-dm-send" type="button">
+<i aria-hidden="true" class="ph ph-paper-plane-tilt"></i>
+</button>
+</footer>
+</div>
+<div class="forum-detail" hidden="" id="forum-detail">
+<header class="forum-wx-subheader">
+<button aria-label="返回" class="forum-wx-subheader-back" id="forum-detail-back" type="button">
+<i aria-hidden="true" class="ph ph-caret-left"></i>
+</button>
+<h1 class="forum-wx-subheader-title">帖子详情</h1>
+</header>
+<div class="forum-detail-scroll" id="forum-detail-scroll">
+<div class="forum-comments-block" hidden="" id="forum-detail-comments"></div>
+</div>
+<footer class="forum-detail-compose">
+<button aria-label="续聊" class="forum-detail-tool" id="forum-detail-continue-btn" title="续聊" type="button">
+<i aria-hidden="true" class="ph ph-quill"></i>
+</button>
+<button aria-label="分享到密谈" class="forum-detail-tool" id="forum-detail-share-btn" title="分享到密谈 · 选角色" type="button">
+<i aria-hidden="true" class="ph ph-share-network"></i>
+</button>
+<label class="visually-hidden" for="forum-detail-input">写评论</label>
+<textarea class="forum-detail-input" id="forum-detail-input" maxlength="500" placeholder="添加评论…" rows="1"></textarea>
+<button aria-label="发送" class="forum-detail-send" disabled="" id="forum-detail-send" type="button">
+<i aria-hidden="true" class="ph ph-paper-plane-tilt"></i>
+</button>
+</footer>
+</div>
+<div aria-hidden="true" class="forum-sector-sheet-wrap" hidden="" id="forum-sector-sheet">
+<button aria-label="关闭" class="forum-sector-sheet-backdrop" id="forum-sector-sheet-backdrop" tabindex="-1" type="button"></button>
+<div aria-labelledby="forum-sector-sheet-title" class="forum-sector-sheet" role="dialog">
+<span aria-hidden="true" class="forum-compose-handle"></span>
+<header class="forum-sector-sheet-head">
+<h2 class="forum-sector-sheet-title" id="forum-sector-sheet-title">板块与世界书</h2>
+<button aria-label="关闭" class="forum-compose-close" id="forum-sector-sheet-close" type="button">
+<i aria-hidden="true" class="ph ph-x"></i>
+</button>
+</header>
+<div class="forum-sector-sheet-scroll">
+<p class="forum-sector-sheet-hint">每个板块可绑定不同世界书；刷帖与互动会按当前板块的世界观与风格生成。</p>
+<button class="forum-sector-api-entry" id="forum-open-api-sheet" type="button">
+<span class="forum-sector-api-entry-main"><i aria-hidden="true" class="ph ph-plug"></i> 论坛 API 接入</span>
+<span class="forum-sector-api-entry-meta" id="forum-api-entry-meta">与密谈相同</span>
+</button>
+<div aria-label="管理板块" class="forum-sector-sheet-sectors" id="forum-sector-sheet-sectors" role="tablist"></div>
+<button class="forum-sector-add-btn" id="forum-sector-add-btn" type="button">
+<i aria-hidden="true" class="ph ph-plus"></i> 新建板块
+            </button>
+<label class="forum-sector-sheet-label" for="forum-sector-name-input">板块名称</label>
+<input autocomplete="off" class="forum-sector-wb-search" id="forum-sector-name-input" maxlength="16" placeholder="如：吃瓜、日常、同人…" type="text"/>
+<button class="forum-sector-del-btn" id="forum-sector-delete-btn" type="button">
+<i aria-hidden="true" class="ph ph-trash"></i> 删除当前板块
+            </button>
+<div class="forum-sector-sheet-label">内容风格</div>
+<p class="forum-sector-sheet-hint">刷帖题材倾向；选「跟随世界书」只按设定写。更细的规则写在下方「补充设定」。</p>
+<div aria-label="板块内容风格" class="forum-gen-chips" id="forum-sector-gen-chips" role="listbox">
+<button class="forum-gen-chip is-active" data-gen-type="general" title="日常、吐槽、求助混刷" type="button">综合</button>
+<button class="forum-gen-chip" data-gen-type="daily" title="吃喝通勤、小确幸小倒霉" type="button">日常</button>
+<button class="forum-gen-chip" data-gen-type="gossip" title="传闻吃瓜、半真半假" type="button">八卦</button>
+<button class="forum-gen-chip" data-gen-type="fanfic" title="AU、小剧场、脑洞" type="button">同人</button>
+<button class="forum-gen-chip" data-gen-type="plain" title="不加预设风格，严格按世界书" type="button">跟随世界书</button>
+</div>
+<label class="forum-sector-sheet-label" for="forum-sector-custom-prompt">补充设定（可选）</label>
+<textarea class="forum-sector-custom-prompt" id="forum-sector-custom-prompt" placeholder="街区规则、时代背景、派系关系…与世界书叠加生效" rows="3"></textarea>
+<div class="forum-sector-sheet-label">绑定世界书（本板块）</div>
+<label class="visually-hidden" for="forum-sector-wb-search">搜索世界书</label>
+<input autocomplete="off" class="forum-sector-wb-search" id="forum-sector-wb-search" placeholder="搜索书名、条目或关键词…" type="search"/>
+<div aria-label="可选世界书" class="forum-sector-wb-chips" id="forum-sector-wb-chips" role="listbox"></div>
+<p class="forum-sector-wb-empty" hidden="" id="forum-sector-wb-empty">书架空空的。去桌面 → 世界书，先写一本设定。</p>
+<p class="forum-sector-wb-count" id="forum-sector-wb-count"></p>
+<div aria-hidden="true" class="forum-sector-divider"></div>
+<div class="forum-sector-sheet-label">板块活跃</div>
+<p class="forum-sector-sheet-hint">开启后，该板块在后台也会按冷却产生轻量帖评（需同时开启下方总开关）。</p>
+<label class="forum-toggle-row">
+<span>本板块后台活跃</span>
+<input class="forum-toggle-input" id="forum-sector-bg-toggle" type="checkbox"/>
+</label>
+<div class="forum-sector-sheet-label">论坛总开关</div>
+<label class="forum-toggle-row">
+<span>启用论坛后台活跃</span>
+<input class="forum-toggle-input" id="forum-global-bg-toggle" type="checkbox"/>
+</label>
+<div class="forum-range-row">
+<label for="forum-global-bg-cooldown">全局冷却</label>
+<input class="forum-num-input" id="forum-global-bg-cooldown" max="240" min="5" type="number" value="30"/>
+<span>分钟</span>
+</div>
+</div>
+<button class="forum-sector-sheet-save" id="forum-sector-sheet-save" type="button">保存板块设定</button>
+</div>
+</div>
+<div aria-hidden="true" class="forum-sector-sheet-wrap" hidden="" id="forum-api-sheet">
+<button aria-label="关闭" class="forum-sector-sheet-backdrop" id="forum-api-sheet-backdrop" tabindex="-1" type="button"></button>
+<div aria-labelledby="forum-api-sheet-title" class="forum-sector-sheet forum-api-sheet" role="dialog">
+<span aria-hidden="true" class="forum-compose-handle"></span>
+<header class="forum-sector-sheet-head">
+<h2 class="forum-sector-sheet-title" id="forum-api-sheet-title">论坛 API</h2>
+<button aria-label="关闭" class="forum-compose-close" id="forum-api-sheet-close" type="button">
+<i aria-hidden="true" class="ph ph-x"></i>
+</button>
+</header>
+<div class="forum-sector-sheet-scroll">
+<p class="forum-sector-sheet-hint">刷帖、续聊、后台活跃可走独立 API，与密谈主接口分开计费或换模型。</p>
+<label class="forum-sector-sheet-label" for="forum-ai-source">接口来源</label>
+<select aria-label="论坛 API 来源" class="forum-ai-select" id="forum-ai-source">
+<option value="main">与密谈主 API 相同</option>
+<option value="profile">设置里的配置档案</option>
+<option value="custom">论坛独立填写</option>
+</select>
+<div class="forum-api-profile-wrap" hidden="" id="forum-ai-profile-wrap">
+<label class="forum-sector-sheet-label" for="forum-ai-profile">配置档案</label>
+<select aria-label="选择配置档案" class="forum-ai-select" id="forum-ai-profile"></select>
+<p class="forum-api-key-note">与「我的 → 连接 API」里保存的档案相同，改档案会同步生效。</p>
+</div>
+<div class="forum-api-fields" hidden="" id="forum-ai-fields">
+<label class="forum-sector-sheet-label" for="forum-ai-base">API Base（含 /v1）</label>
+<input autocomplete="off" class="forum-sector-wb-search" id="forum-ai-base" placeholder="https://api.openai.com/v1" type="url"/>
+<label class="forum-sector-sheet-label" for="forum-ai-key">API Key</label>
+<input autocomplete="off" class="forum-sector-wb-search" id="forum-ai-key" placeholder="sk-…" type="password"/>
+<p class="forum-api-key-note" id="forum-ai-key-note"></p>
+<label class="forum-sector-sheet-label" for="forum-ai-model">模型 model</label>
+<input autocomplete="off" class="forum-sector-wb-search" id="forum-ai-model" placeholder="gpt-4o-mini" type="text"/>
+<div class="forum-range-row">
+<label for="forum-ai-temperature">温度</label>
+<input id="forum-ai-temperature" max="2" min="0" step="0.05" type="range" value="0.92"/>
+<span id="forum-ai-temp-value">0.92</span>
+</div>
+</div>
+<p class="forum-api-status" id="forum-ai-status"></p>
+</div>
+<button class="forum-sector-sheet-save" id="forum-api-save-btn" type="button">保存 API 配置</button>
+</div>
+</div>
+<div aria-hidden="true" class="forum-sector-sheet-wrap" hidden="" id="forum-refresh-sheet">
+<button aria-label="关闭" class="forum-sector-sheet-backdrop" id="forum-refresh-sheet-backdrop" tabindex="-1" type="button"></button>
+<div aria-labelledby="forum-refresh-sheet-title" class="forum-sector-sheet forum-refresh-sheet" role="dialog">
+<span aria-hidden="true" class="forum-compose-handle"></span>
+<header class="forum-sector-sheet-head">
+<h2 class="forum-sector-sheet-title" id="forum-refresh-sheet-title">刷帖</h2>
+<button aria-label="关闭" class="forum-compose-close" id="forum-refresh-sheet-close" type="button">
+<i aria-hidden="true" class="ph ph-x"></i>
+</button>
+</header>
+<div class="forum-sector-sheet-scroll">
+<p class="forum-refresh-sector-name" id="forum-refresh-sector-name">当前板块 · 综合</p>
+<div class="forum-sector-sheet-label">本批帖子数量</div>
+<div class="forum-range-row forum-range-row--dual">
+<input aria-label="最少帖数" class="forum-num-input" id="forum-refresh-min" max="20" min="1" type="number" value="3"/>
+<span>到</span>
+<input aria-label="最多帖数" class="forum-num-input" id="forum-refresh-max" max="20" min="1" type="number" value="6"/>
+<span>篇</span>
+</div>
+<label class="forum-check-row">
+<input checked="" id="forum-refresh-passers" type="checkbox"/>
+<span>包含路人网友帖</span>
+</label>
+<div class="forum-sector-sheet-label">参与角色</div>
+<p class="forum-sector-sheet-hint">勾选的角色更可能在本批刷帖中出现。</p>
+<div class="forum-cast-list" id="forum-refresh-cast-list" role="list"></div>
+<p class="forum-cast-empty" hidden="" id="forum-refresh-cast-empty">还没有角色，先去人设添加。</p>
+</div>
+<button class="forum-sector-sheet-save" id="forum-refresh-run-btn" type="button">
+<i aria-hidden="true" class="ph ph-arrows-clockwise"></i> 开始刷帖
+            </button>
+</div>
+</div>
+<div aria-hidden="true" class="forum-sector-sheet-wrap" hidden="" id="forum-share-sheet">
+<button aria-label="关闭" class="forum-sector-sheet-backdrop" id="forum-share-sheet-backdrop" tabindex="-1" type="button"></button>
+<div aria-labelledby="forum-share-sheet-title" class="forum-sector-sheet forum-share-sheet" role="dialog">
+<span aria-hidden="true" class="forum-compose-handle"></span>
+<header class="forum-sector-sheet-head">
+<h2 class="forum-sector-sheet-title" id="forum-share-sheet-title">分享到密谈</h2>
+<button aria-label="关闭" class="forum-compose-close" id="forum-share-sheet-close" type="button">
+<i aria-hidden="true" class="ph ph-x"></i>
+</button>
+</header>
+<div class="forum-sector-sheet-scroll">
+<p class="forum-sector-sheet-hint">选一位角色，把这条广场帖发进你们的密谈；对方可聊天回评，评论会同步到广场。</p>
+<div class="forum-cast-list" id="forum-share-char-list" role="list"></div>
+<p class="forum-cast-empty" hidden="" id="forum-share-char-empty">还没有角色，请先去人设添加。</p>
+</div>
+</div>
+</div>
+<div aria-hidden="true" class="forum-compose" hidden="" id="forum-compose-wrap">
+<button aria-label="关闭" class="forum-compose-backdrop" id="forum-compose-backdrop" tabindex="-1" type="button"></button>
+<div aria-labelledby="forum-compose-title" class="forum-compose-sheet" role="dialog">
+<span aria-hidden="true" class="forum-compose-handle"></span>
+<div class="forum-compose-scroll">
+<header class="forum-compose-head">
+<h2 class="forum-compose-title" id="forum-compose-title">发帖</h2>
+<button aria-label="关闭" class="forum-compose-close" id="forum-compose-close" type="button">
+<i aria-hidden="true" class="ph ph-x"></i>
+</button>
+</header>
+<div aria-label="发帖类型" class="forum-compose-modes" role="tablist">
+<button aria-selected="true" class="forum-compose-mode is-active" data-compose-mode="short" role="tab" type="button">说说</button>
+<button aria-selected="false" class="forum-compose-mode" data-compose-mode="long" role="tab" type="button">长帖</button>
+</div>
+<div class="forum-compose-repost" hidden="" id="forum-compose-repost"></div>
+<textarea class="forum-compose-input" id="forum-compose-input" placeholder="分享此刻的想法…" rows="5"></textarea>
+<div class="forum-compose-media" hidden="" id="forum-compose-media">
+<button class="forum-compose-media-btn" disabled="" id="forum-compose-image-btn" type="button">
+<i aria-hidden="true" class="ph ph-image"></i> 配图（即将上线）
+              </button>
+<button class="forum-compose-media-btn" disabled="" id="forum-compose-hidden-btn" type="button">
+<i aria-hidden="true" class="ph ph-eye-slash"></i> 隐藏字（即将上线）
+              </button>
+</div>
+</div>
+<button class="forum-compose-submit" disabled="" id="forum-compose-submit" type="button">发布</button>
+</div>
+</div>
+</section><div aria-labelledby="forum-bg-notify-title" aria-modal="true" class="forum-bg-notify" hidden="" id="forum-bg-notify" role="dialog">
+<button aria-label="关闭" class="forum-bg-notify-backdrop" id="forum-bg-notify-backdrop" tabindex="-1" type="button"></button>
+<div class="forum-bg-notify-card">
+<div aria-hidden="true" class="forum-bg-notify-icon"><i class="ph ph-broadcast"></i></div>
+<h3 class="forum-bg-notify-title" id="forum-bg-notify-title">广场有新帖</h3>
+<p class="forum-bg-notify-desc" id="forum-bg-notify-desc"></p>
+<div class="forum-bg-notify-actions">
+<button class="forum-bg-notify-btn forum-bg-notify-btn--primary" id="forum-bg-notify-open" type="button">去看看</button>
+<button class="forum-bg-notify-btn" id="forum-bg-notify-dismiss" type="button">稍后</button>
+</div>
+</div>
+</div></div><div id="toast" role="status"></div><script src="host-adapter.js"></script><script src="forum.js"></script><script>openForumScreen();</script></body></html>

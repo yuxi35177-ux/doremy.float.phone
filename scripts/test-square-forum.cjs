@@ -1,0 +1,25 @@
+const {chromium}=require('playwright');
+const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const root=path.resolve(__dirname,'../public');
+(async()=>{
+ const server=http.createServer((req,res)=>{const file=path.join(root,decodeURIComponent(req.url.split('?')[0]));if(!file.startsWith(root)||!fs.existsSync(file)){res.writeHead(404);return res.end();}res.setHeader('Content-Type',file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(file));});await new Promise(r=>server.listen(0,'127.0.0.1',r));
+ const browser=await chromium.launch({headless:true,...(process.env.FORUM_CHROME?{executablePath:process.env.FORUM_CHROME}:{}),args:['--no-sandbox']});
+ try{
+ const page=await browser.newPage({viewport:{width:393,height:852},hasTouch:true});const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept('手动身份'));
+ await page.addInitScript(()=>{
+  const originalFetch=fetch;let sequence=0;window.testCalls=[];const saved=JSON.parse(sessionStorage.getItem('forumTest')||'{}');
+  window.FloatForumHost={snapshot:()=>({identity:{id:'me',displayName:'测试用户'},characters:[{id:'c1',displayName:'同学',summary:'大学学生'}],worldBooks:[{id:'wb1',title:'大学世界书',entries:[{title:'校园',content:'海边大学'}]}],api:{apiKey:'test',baseUrl:'https://test.invalid/v1',model:'test'},profiles:[]}),read:k=>saved[k],write:(k,v)=>{saved[k]=structuredClone(v);sessionStorage.setItem('forumTest',JSON.stringify(saved));},close:()=>window.testClosed=true,fetch:originalFetch,imageData:async()=>'',threads:()=>[],memory:()=>'',recent:()=>'',complete:async body=>{const request=JSON.parse(body.messages.at(-1).content);window.testCalls.push(request);const roles=body.messages[0].content.includes('身份称号');const items=Array.from({length:request.count},()=>({label:(roles?'身份':'认证')+(++sequence),keywords:'学生',posts:0,likes:0,comments:0,icon:'seal-check'}));return{choices:[{message:{content:JSON.stringify({items})}}]};},addFriend:async()=>({id:'c1'}),openFriend:()=>{},share:async()=>true};
+ });
+ await page.goto('http://127.0.0.1:'+server.address().port+'/square-forum/index.html');await page.locator('#forum-screen.is-open').waitFor();
+ await page.locator('#forum-sector-settings-btn').click();await page.locator('#forum-extra-worldView').fill('海边大学');await page.locator('#forum-extra-rules').fill('友善讨论');await page.locator('#forum-extra-certificationOutline').fill('大学');
+ await page.locator('#forum-generate-count').fill('3');await page.getByRole('button',{name:'AI 追加身份',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('#forum-extra-roleKind option').length===8);
+ await page.locator('#forum-generate-count').fill('2');await page.getByRole('button',{name:'AI 追加身份',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('#forum-extra-roleKind option').length===10);
+ const before=await page.locator('#forum-extra-certs fieldset').count();await page.locator('#forum-generate-count').fill('3');await page.getByRole('button',{name:'AI 追加认证',exact:true}).click();await page.waitForFunction(n=>document.querySelectorAll('#forum-extra-certs fieldset').length===n,before+3);
+ await page.locator('#forum-extra-roleKind').selectOption('owner');await page.locator('#forum-permission-groups input[value=member]').check();await page.locator('#forum-sector-sheet-save').click();await page.waitForTimeout(350);
+ await page.reload();await page.locator('#forum-sector-settings-btn').click();assert.equal(await page.locator('#forum-extra-worldView').inputValue(),'海边大学');assert.equal(await page.locator('#forum-extra-roleKind option').count(),10);assert.equal(await page.locator('#forum-permission-groups input[value=member]').isChecked(),true);await page.locator('#forum-sector-sheet-close').click();await page.waitForTimeout(350);
+ // Seed persisted posts, reopen normally, and verify nested back and moderation.
+ await page.evaluate(()=>{closeForumScreen();const r=FloatForumHost.read('forum'),m=r.byMask.me;m.posts=[{id:'p1',sectorId:'main',authorName:'路人',content:'测试帖子',at:Date.now(),likes:[],comments:[],images:[]}];FloatForumHost.write('forum',r);openForumScreen();});await page.locator('[data-open-post=p1]').first().click();assert.equal(await page.locator('#forum-detail').isVisible(),true);assert.equal(await page.evaluate(()=>forumBack()),true);assert.equal(await page.locator('#forum-detail').isVisible(),false);assert.equal(await page.evaluate(()=>!!window.testClosed),false);
+ await page.locator('#forum-feed [data-feature-id=p1]').click();assert.equal(await page.evaluate(()=>FloatForumHost.read('forum').byMask.me.posts[0].featured),true);await page.locator('#forum-feed [data-delete-post=p1]').click();assert.equal(await page.evaluate(()=>FloatForumHost.read('forum').byMask.me.posts.length),0);
+ assert.deepEqual(errors,[]);console.log('PASS: role count/continuous append, certification append, settings persistence, permissions, nested back, feature and delete');
+ }finally{await browser.close();server.close();}
+})().catch(e=>{console.error(e);process.exit(1)});

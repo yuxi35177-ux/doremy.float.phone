@@ -1,0 +1,24 @@
+'use strict';
+const host=parent.FloatForumHost;
+if(!host)throw Error('请从小手机论坛图标进入');
+const snapshot=()=>host.snapshot();
+window.showToast=message=>{const t=document.getElementById('toast');t.textContent=String(message);t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);};
+window.getActiveMaskIdForInbox=()=>snapshot().identity.id;
+window.readUserMask=()=>snapshot().identity;
+window.readCharPersonaStore=()=>({items:snapshot().characters,activeId:''});
+window.readWorldBookStore=()=>({volumes:snapshot().worldBooks});
+window.XXJ_DB={K:{FORUM_STORE:'forum',FORUM_AI_CONFIG:'api',CHAR_PERSONA_STORE:'characters',USER_MASK_STORE:'masks',WORLD_BOOK_STORE:'worldBooks'},getKv(key){if(key==='characters')return readCharPersonaStore();if(key==='masks')return{activeId:getActiveMaskIdForInbox(),items:[readUserMask()]};if(key==='worldBooks')return readWorldBookStore();return host.read(key);},setKv:(k,v)=>host.write(k,v),readKvFromIdb:async key=>window.XXJ_DB.getKv(key)};
+window.RP_AI={DEFAULT_BASE:'https://api.openai.com/v1',DEFAULT_MODEL:'gpt-4o-mini',DEFAULT_TEMPERATURE:0.9,getConfig:()=>snapshot().api,readProfiles:()=>snapshot().profiles,resolveOpenAiV1Base:v=>String(v).replace(/\/+$/,''),chatCompletions:(body,opts)=>host.complete(body,opts?.completionConfig||body.completionConfig)};
+window.readChatCompletionChoiceText=data=>data?.choices?.[0]?.message?.content||'';
+window.XXJ_Friends={review:async data=>confirm('将「'+data.name+'」加入小手机联系人？')?host.addFriend(data):null,open:async id=>host.openFriend(id)};
+window.listDmThreadsForChar=(mid,id)=>host.threads(id);
+window.readChatLogForMaskThread=(mid,id)=>({id});
+window.buildCharThreadMemoryTimelineForPrompt=thread=>host.memory(thread?.charId||thread?.characterId);
+window.formatLinkedDmRecentMessagesForPrompt=(...args)=>host.recent(args);
+window.extractOpenAiImageFieldsFromGenerationsJson=data=>({apiError:data?.error?.message,b64:data?.data?.[0]?.b64_json,url:data?.data?.[0]?.url});
+window.fetchImageDataUrlFromRemoteUrl=async url=>{try{const data=await host.imageData(url);return{ok:true,dataUrl:data};}catch{return{ok:false};}};
+// Native networking is only exposed in the parent main frame.
+window.fetch=(...args)=>host.fetch(...args);
+const style=()=>{const d=parent.document.documentElement;document.documentElement.dataset.theme=d.dataset.theme||'';document.documentElement.classList.toggle('dark',d.classList.contains('dark'));document.body.classList.toggle('dark',d.classList.contains('dark')||d.dataset.theme==='dark');document.documentElement.style.setProperty('--forum-text-scale',parent.getComputedStyle(d).getPropertyValue('--app-text-scale')||'1');};style();
+const observer=new MutationObserver(style);observer.observe(parent.document.documentElement,{attributes:true,attributeFilter:['class','style','data-theme']});window.addEventListener('pagehide',()=>observer.disconnect());
+document.addEventListener('click',e=>{if(e.target.closest('#forum-close'))setTimeout(()=>host.close(),0);},true);

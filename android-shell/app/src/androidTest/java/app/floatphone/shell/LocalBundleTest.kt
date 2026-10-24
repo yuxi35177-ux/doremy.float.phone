@@ -50,6 +50,13 @@ class LocalBundleTest {
             until(scenario, "!!document.querySelector('[aria-label=\"现实功能逐项测试\"] [role=status]')")
             assertTrue(js(scenario, "document.querySelector('[aria-label=\"现实功能逐项测试\"] [role=status]').textContent.includes('percent')") == "true")
             assertTrue(js(scenario, "typeof AndroidShell.getPerceptionSnapshot==='function' && typeof AndroidShell.getRealtimeSnapshot==='function'") == "true")
+            js(scenario, "document.querySelector('[data-flip-id=\"icon:square_forum\"]').click()")
+            until(scenario, "!!document.querySelector('[data-testid=square-forum-frame]')?.contentDocument?.querySelector('#forum-screen.is-open')")
+            js(scenario, "document.querySelector('[data-testid=square-forum-frame]').contentDocument.querySelector('#forum-sector-settings-btn').click()")
+            until(scenario, "!!document.querySelector('[data-testid=square-forum-frame]').contentDocument.querySelector('#forum-generate-count')")
+            assertTrue(js(scenario, "document.querySelector('[data-testid=square-forum-frame]').contentDocument.body.innerText.includes('可删除、加精华的身份组')") == "true")
+            js(scenario, "window.dispatchEvent(new Event('float-navigation-back',{cancelable:true}))")
+            assertTrue(js(scenario, "!!document.querySelector('[data-testid=square-forum-frame]')") == "true")
         }
     }
 }
