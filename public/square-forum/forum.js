@@ -1088,6 +1088,7 @@
     let baseUrl = String(p.baseUrl || "").trim() || defBase;
     if (ai?.resolveOpenAiV1Base) baseUrl = ai.resolveOpenAiV1Base(baseUrl);
     return {
+      id:p.id,
       baseUrl,
       apiKey: String(p.apiKey || "").trim(),
       model: (String(p.model || "").trim() || defModel),

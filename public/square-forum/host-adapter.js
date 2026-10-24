@@ -19,6 +19,6 @@ window.extractOpenAiImageFieldsFromGenerationsJson=data=>({apiError:data?.error?
 window.fetchImageDataUrlFromRemoteUrl=async url=>{try{const data=await host.imageData(url);return{ok:true,dataUrl:data};}catch{return{ok:false};}};
 // Native networking is only exposed in the parent main frame.
 window.fetch=(...args)=>host.fetch(...args);
-const style=()=>{const d=parent.document.documentElement;document.documentElement.dataset.theme=d.dataset.theme||'';document.documentElement.classList.toggle('dark',d.classList.contains('dark'));document.body.classList.toggle('dark',d.classList.contains('dark')||d.dataset.theme==='dark');document.documentElement.style.setProperty('--forum-text-scale',parent.getComputedStyle(d).getPropertyValue('--app-text-scale')||'1');};style();
-const observer=new MutationObserver(style);observer.observe(parent.document.documentElement,{attributes:true,attributeFilter:['class','style','data-theme']});window.addEventListener('pagehide',()=>observer.disconnect());
+const style=()=>{const d=parent.document.documentElement,dark=d.dataset.phoneColorMode==='dark'||d.dataset.theme==='dark'||d.classList.contains('dark');document.documentElement.classList.toggle('dark',dark);document.body.classList.toggle('dark',dark);document.documentElement.style.setProperty('--forum-text-scale',parent.getComputedStyle(d).getPropertyValue('--app-text-scale')||'1');};style();
+const observer=new MutationObserver(style);observer.observe(parent.document.documentElement,{attributes:true,attributeFilter:['class','style','data-theme','data-phone-color-mode']});window.addEventListener('pagehide',()=>observer.disconnect());
 document.addEventListener('click',e=>{if(e.target.closest('#forum-close'))setTimeout(()=>host.close(),0);},true);

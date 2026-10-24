@@ -6,6 +6,8 @@ import {loadCharacters,saveCharacters,createCharacter} from "@/lib/character-sto
 import {addChatContact,createOrGetSession,pushChatMessage,hydrateChatStorage,loadChatSessions,loadChatMessages,loadChatContacts} from "@/lib/chat-storage";
 import {loadApiConfigs,loadBindingConfig,loadWorldBooks,resolveUserIdentity} from "@/lib/settings-storage";
 import {buildProviderRequest,parseProviderResponse,type LlmRequestMessage} from "@/lib/llm-provider-adapter";
+import {localApiFetch,isLoopbackApiUrl} from "@/lib/local-api-fetch";
+import {determineBaseUrl} from "@/lib/api-helpers";
 import {loadMemoryEntries} from "@/lib/memory-storage";
 import {fetchLlmPayload} from "@/lib/llm-http";
 registerDynamicPrefix("ai_phone_square_forum_v1:");
@@ -19,14 +21,18 @@ export function SquareForumApp({onClose,onOpenSession}:{onClose:()=>void;onOpenS
  let active=true;
  const memories=new Map<string,string>();
  const config=()=>{const a=loadApiConfigs();return a.find(a=>a.id===loadBindingConfig().globalDefaults.apiConfigId)||a[0];};
- const profile=(a:ReturnType<typeof config>)=>({id:a?.id,name:a?.name,baseUrl:a?.baseUrl,apiKey:a?.apiKey,model:a?.defaultModel,temperature:0.9});
+ const profile=(a:ReturnType<typeof config>)=>({id:a?.id,name:a?.name,baseUrl:a?determineBaseUrl(a):undefined,apiKey:a?.apiKey,model:a?.defaultModel,temperature:0.9});
+ const forumFetch=async(input:RequestInfo|URL,init?:RequestInit)=>{
+ const url=String(input);if(isLoopbackApiUrl(url))return localApiFetch(url,init);
+ return fetch("/api/tool-proxy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url,method:init?.method||"GET",headers:Object.fromEntries(new Headers(init?.headers).entries()),body:init?.body??null,timeoutMs:120000}),signal:init?.signal});
+ };
  const host={
  snapshot(){const p=resolveUserIdentity();return{identity:{id:p?.id||"default",displayName:p?.name||"我",avatar:p?.avatarUrl||"",persona:p?.bio||""},characters:loadCharacters().map(c=>({...c,displayName:c.name,summary:c.persona})),worldBooks:loadWorldBooks().map(b=>({...b,title:b.name,entries:b.entries.map(e=>({...e,title:e.comment||e.key,keywords:e.key,enabled:!e.disable}))})),api:profile(config()),profiles:loadApiConfigs().map(profile)};},
  read(k:string){try{return JSON.parse(kvGet("ai_phone_square_forum_v1:"+k)||"null");}catch{return null;}},
  write(k:string,v:unknown){if(active)kvSet("ai_phone_square_forum_v1:"+k,JSON.stringify(v));},
  close(){callbacks.current.onClose();},
- fetch:(input:RequestInfo|URL,init?:RequestInit)=>fetch(input,init),
- async imageData(url:string){const res=await fetch(url,{credentials:"omit"});if(!res.ok)throw Error("图片下载失败");const blob=await res.blob();if(blob.size>15*1024*1024)throw Error("图片过大");return new Promise<string>((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=reject;r.readAsDataURL(blob);});},
+ fetch:forumFetch,
+ async imageData(url:string){const res=await forumFetch(url,{credentials:"omit"});if(!res.ok)throw Error("图片下载失败");if(res.headers.get("Content-Type")?.includes("application/json")){const data=await res.json();if(data._binary&&data.data&&String(data.contentType).startsWith("image/")){if(data.data.length>20*1024*1024)throw Error("图片过大");return "data:"+data.contentType+";base64,"+data.data;}throw Error("图片下载失败");}const blob=await res.blob();if(blob.size>15*1024*1024)throw Error("图片过大");return new Promise<string>((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=reject;r.readAsDataURL(blob);});},
  threads(id:string){return loadChatSessions().filter(s=>loadChatContacts().some(c=>c.id===s.contactId&&c.characterId===id)).map(s=>({...s,charId:id}));},
  memory(id?:string){return id?memories.get(id)||"":"";},
  recent(args:unknown[]){const arg=args.find(a=>a&&typeof a==="object") as {id?:string;characterId?:string;charId?:string}|undefined;const session=loadChatSessions().find(s=>s.id===arg?.id||loadChatContacts().some(c=>c.id===s.contactId&&c.characterId===(arg?.characterId||arg?.charId)));return session?loadChatMessages(session.id,20).map(m=>m.role+": "+m.content).join("\n"):"";},
@@ -34,7 +40,7 @@ export function SquareForumApp({onClose,onOpenSession}:{onClose:()=>void;onOpenS
  const known=loadApiConfigs().find(a=>a.id===input?.id),base=known||config();if(!base&&!input?.apiKey)throw Error("请先配置论坛或小手机 API");
  const selected={...(base||{id:"forum-custom",provider:"custom",enableImageRecognition:false,enableImageGeneration:false}),...(!known&&input?.baseUrl?{provider:"custom"}:{}),apiKey:input?.apiKey||base?.apiKey||"",baseUrl:input?.baseUrl||base?.baseUrl,defaultModel:input?.model||base?.defaultModel||""};
  const request=buildProviderRequest(selected,null,body.messages,{stream:false,maxTokens:body.max_tokens});const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),120000);
- try{const response=await fetchLlmPayload(request,{signal:controller.signal});if(!response.ok)throw Error("论坛 AI 请求失败（"+response.status+"），请检查配置");const parsed=parseProviderResponse(request.providerKind,await response.json());if(!parsed.content)throw Error("模型没有返回论坛内容");return{choices:[{message:{content:parsed.content}}]};}finally{clearTimeout(timer);}
+ try{const response=isLoopbackApiUrl(request.url)?await fetchLlmPayload(request,{signal:controller.signal}):await forumFetch(request.url,{method:"POST",headers:request.headers,body:JSON.stringify(request.body),signal:controller.signal});if(!response.ok)throw Error("论坛 AI 请求失败（"+response.status+"），请检查配置");const parsed=parseProviderResponse(request.providerKind,await response.json());if(!parsed.content)throw Error("模型没有返回论坛内容");return{choices:[{message:{content:parsed.content}}]};}finally{clearTimeout(timer);}
  },
  async addFriend(data:{name:string;summary?:string;identity?:string}){await hydrateChatStorage();const chars=loadCharacters();let c=chars.find(c=>c.name===data.name);if(!c){c=createCharacter({name:data.name,avatar:null,persona:[data.summary,data.identity].filter(Boolean).join("\n"),tags:["论坛好友"]});saveCharacters([...chars,c]);}addChatContact(c.id);return{...c,displayName:c.name};},
  openFriend(id:string){addChatContact(id);callbacks.current.onOpenSession(createOrGetSession(loadChatContacts().find(c=>c.characterId===id)!.id).id);},

@@ -91,6 +91,10 @@ jobs:
           "$SIGNER" verify --verbose release-assets/Hazel-vivoS17-1.0.19-local.apk
           cd release-assets
           sha256sum *.apk > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Hazel-vivoS17-1.0.19-local
+          path: phone/release-assets/*
       - name: Allow emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -104,7 +108,7 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -feature -Vulkan
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader -cores 2 -memory 2048 -feature -Vulkan
           working-directory: phone
           script: |
             adb shell svc wifi disable
@@ -119,10 +123,6 @@ jobs:
             phone/android-emulator.log
             phone/android-shell/app/build/outputs/androidTest-results/**
             phone/android-shell/app/build/reports/androidTests/**
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Hazel-vivoS17-1.0.19-local
-          path: phone/release-assets/*
       - name: Remove temporary signing files
         if: always()
         run: rm -f "$RUNNER_TEMP/phone.keystore" "$RUNNER_TEMP/phone.keystore.enc"
