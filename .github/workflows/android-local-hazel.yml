@@ -2,7 +2,7 @@ name: Build Hazel Local Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [local-apk-20261023]
+    branches: [real-device-tests-20261024]
 
 permissions:
   contents: write
@@ -33,6 +33,10 @@ jobs:
           path: phone
       - name: Apply reviewed local APK sources
         run: git apply --check ../build-data/scripts/hazel-local-apk.patch && git apply ../build-data/scripts/hazel-local-apk.patch
+      - name: Add shared device test controls
+        run: |
+          cp ../build-data/components/real-device-tests.tsx components/real-device-tests.tsx
+          cp ../build-data/components/ui/page-shell.tsx components/ui/page-shell.tsx
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

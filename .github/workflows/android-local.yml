@@ -2,7 +2,7 @@ name: Build Local Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [local-apk-20261023]
+    branches: [real-device-tests-20261024]
     paths: ['android-shell/**', 'components/**', 'lib/**', 'styles/**', 'next.config.mjs', 'scripts/build-phone-local.sh', 'scripts/phone-bootstrap.cjs', 'scripts/package-phone-server.mjs']
 
 permissions:

@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode, Ref } from "react";
+import { RealDeviceTests } from "../real-device-tests";
 import { ChevronLeft } from "lucide-react";
 
 type PageShellProps = {
@@ -35,6 +36,7 @@ export function PageShell({ title = "", onBack, leftAction, rightAction, childre
       </header>
       <div ref={bodyRef} className="page-body" data-ui="body">
         {children}
+        {typeof title === "string" && <RealDeviceTests key={title} title={title} />}
       </div>
       {footer}
     </div>
