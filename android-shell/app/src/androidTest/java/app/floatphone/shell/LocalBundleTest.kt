@@ -45,6 +45,10 @@ class LocalBundleTest {
             js(scenario, "Array.from(document.querySelectorAll('.settings-main-menu .card-label')).find(e=>e.textContent==='感知').closest('button').click()")
             until(scenario, "!!document.querySelector('.per-shell')")
             assertTrue(js(scenario, "['电量与充电','网络状态','前台应用','步数','位置','睡眠','系统日历','联系人','使用统计','回到手机提醒','作息与习惯','采样间隔'].every(s=>document.body.innerText.includes(s))") == "true")
+            until(scenario, "!!document.querySelector('[aria-label=\"现实功能逐项测试\"]')")
+            js(scenario, "document.querySelector('[aria-label=\"现实功能逐项测试\"] button').click()")
+            until(scenario, "!!document.querySelector('[aria-label=\"现实功能逐项测试\"] [role=status]')")
+            assertTrue(js(scenario, "document.querySelector('[aria-label=\"现实功能逐项测试\"] [role=status]').textContent.includes('percent')") == "true")
             assertTrue(js(scenario, "typeof AndroidShell.getPerceptionSnapshot==='function' && typeof AndroidShell.getRealtimeSnapshot==='function'") == "true")
         }
     }
