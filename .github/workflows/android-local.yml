@@ -76,17 +76,19 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Verify bundled UI in an offline Android emulator
+        timeout-minutes: 12
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           arch: x86_64
           target: google_apis
           disable-animations: true
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -feature -Vulkan
           working-directory: .
           script: |
             adb shell svc wifi disable
             adb shell svc data disable
-            gradle -p android-shell --no-daemon -PphoneAbi=x86_64 connectedDebugAndroidTest || { adb logcat -d > android-emulator.log; adb logcat -b crash -d; adb logcat -d -s PhoneNode:I nodejs:E AndroidRuntime:E; exit 1; }
+            gradle -p android-shell --no-daemon -PphoneAbi=x86_64 connectedDebugAndroidTest || { timeout 15s adb logcat -d > android-emulator.log; timeout 15s adb logcat -b crash -d; timeout 15s adb logcat -d -s PhoneNode:I nodejs:E AndroidRuntime:E; exit 1; }
       - name: Save test diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
