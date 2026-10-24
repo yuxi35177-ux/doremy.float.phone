@@ -53,3 +53,5 @@ class LocalBundleTest {
         }
     }
 }
+
+// Release gate: offline device diagnostics must return a real battery reading.
